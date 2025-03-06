@@ -13,7 +13,31 @@
 # 0) ESSENTIALS
 # ______________________________________________________________________________________________________________________
 
+##  helper functions
+##  CHAT GPT (not used)
+calculate_entropy <- function(lca_model) {
+  # Extract posterior probabilities (individual class membership probabilities)
+  post_probs <- lca_model$posterior  # This is an NxK matrix (N = number of observations, K = number of classes)
+  
+  # Calculate entropy for each individual
+  entropy_individuals <- apply(post_probs, 1, function(p) {
+    -sum(p * log(p), na.rm = TRUE)  # Apply the entropy formula
+  })
+  
+  # Calculate the average entropy across all individuals
+  total_entropy <- mean(entropy_individuals)
+  
+  return(total_entropy)
+}
 
+##  stack overflow // https://daob.nl/wp-content/uploads/2015/07/ESRA-course-slides.pdf
+get_entropy<-function(mod){
+  entropy<-function(p)sum(-p*log(p),na.rm = T)
+  error_prior <- entropy(mod$P) # Class proportions
+  error_post <- mean(apply(mod$posterior, 1, entropy))
+  R2_entropy <- (error_prior - error_post) / error_prior
+  return(R2_entropy)
+}
 
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
@@ -74,36 +98,68 @@ summary(mod3)
 summary(mod4)
 summary(mod5)
 
+## 2.4) LCA ALL PEOPLE
+#-------------------------------------------------------
+library(poLCA)
 
-##  LCA
+f <- as.formula(paste0("cbind(",paste(
+  c("s_apo", "s_friends", "s_unbekannte", "s_dealer", "s_eigenanbau1", "s_eigenanbau2", "s_cav",
+    "s_online", "s_socmed", "s_noposs", "s_other"), collapse = ","), ")~1" ))
+set.seed(341)
+am2 <- poLCA(f, data = data, nclass = 2, maxiter = 100000, nrep = 50)
+am3 <- poLCA(f, data = data, nclass = 3, maxiter = 100000, nrep = 50)
+am4 <- poLCA(f, data = data, nclass = 4, maxiter = 100000, nrep = 50)
+am5 <- poLCA(f, data = data, nclass = 5, maxiter = 100000, nrep = 50)
+am6 <- poLCA(f, data = data, nclass = 6, maxiter = 100000, nrep = 50)
+am7 <- poLCA(f, data = data, nclass = 7, maxiter = 100000, nrep = 50)
+am8 <- poLCA(f, data = data, nclass = 8, maxiter = 100000, nrep = 50)
+
+sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
+                    LL = c(am2$llik, am3$llik, am4$llik, am5$llik, am6$llik, am7$llik, am8$llik),
+                    AIC = c(am2$aic, am3$aic, am4$aic, am5$aic, am6$aic, am7$aic, am8$aic),
+                    BIC = c(am2$bic, am3$bic, am4$bic, am5$bic, am6$bic, am7$bic, am8$bic), 
+                    Entropy = c(get_entropy(am2), 
+                                get_entropy(am3),
+                                get_entropy(am4),
+                                get_entropy(am5),
+                                get_entropy(am6),
+                                get_entropy(am7),
+                                get_entropy(am8)))
+sumtab %>% knitr::kable()
+
+for (m in 2:8){
+  
+  mod <- get(ls()[ls() %like% paste0("^am",m)])
+  png(filename = paste0("figures/LCA_testfigure_all_mod",m,"_",DATE,".png"),
+      width = 12, height = 6, unit = "in", res = 300)
+  plot(mod)  
+  dev.off()
+  
+}
+
+lcamod_all <- am5
+
+data$class <- NA_character_
+data[can12m == T]$class <- lcamod_all$predclass
+data[, mean(quant_tot, na.rm = T), by = class][order(class)]
+
+
+
+## 2.5) LCA SUB SAMPLE
+#-------------------------------------------------------
+
 library(poLCA)
 sub <- data[regsample==T & sex != "other"]
 #sub <- data[sex != "other"]
-sub$sex <- factor(sub$sex)
-sub[, edu2g := factor(ifelse(edu %like% "low|mid", "lowmid", "high"))]
-sub[, table(edu,edu2g)]
+#sub$sex <- factor(sub$sex)
+#sub[, edu2g := factor(ifelse(edu %like% "low|mid", "lowmid", "high"))]
+#sub[, table(edu,edu2g)]
 
-##OLD
-lca_mod2 <- poLCA(cbind(source_illegal_num, source_social_num, source_homegrow_num, source_pharma_num, source_other_num) ~ 
-                    #sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk,
-                    sex + age + edu2g + quant_group + purpose + castrisk, 
-                  data = sub, 
-                  nclass = 2)
-lca_mod3 <- poLCA(cbind(source_illegal_num, source_social_num, source_homegrow_num, source_pharma_num, source_other_num) ~ 
-                    #sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk,
-                    sex + age + edu2g + quant_group + purpose + castrisk, 
-                  data = sub, 
-                  nclass = 3)
-lca_mod4 <- poLCA(cbind(source_illegal_num, source_social_num, source_homegrow_num, source_pharma_num, source_other_num) ~ 
-                    #sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk,
-                    sex + agegroup + edu2g + quant_group + purpose + castrisk, 
-                  data = sub, 
-                  nclass = 4)
 
-##NEW  no covariates
-f <- as.formula(paste0("cbind(",paste(
-  c("source_illegal_num", "source_social_num", "source_homegrow_num", "source_pharma_num", "source_other_num")
-  , collapse = ","), ")~1" ))
+## RUN
+#f <- as.formula(paste0("cbind(",paste(
+#  c("source_illegal_num", "source_social_num", "source_homegrow_num", "source_pharma_num", "source_other_num")
+#  , collapse = ","), ")~1" ))
 f <- as.formula(paste0("cbind(",paste(
   c("s_apo", "s_friends", "s_unbekannte", "s_dealer", "s_eigenanbau1", "s_eigenanbau2", "s_cav",
     "s_online", "s_socmed", "s_noposs", "s_other"), collapse = ","), ")~1" ))
@@ -115,34 +171,6 @@ m5 <- poLCA(f, data = sub, nclass = 5, maxiter = 100000, nrep = 50)
 m6 <- poLCA(f, data = sub, nclass = 6, maxiter = 100000, nrep = 50)
 m7 <- poLCA(f, data = sub, nclass = 7, maxiter = 100000, nrep = 50)
 m8 <- poLCA(f, data = sub, nclass = 8, maxiter = 100000, nrep = 50)
-
-
-##  CHAT GPT
-calculate_entropy <- function(lca_model) {
-  # Extract posterior probabilities (individual class membership probabilities)
-  post_probs <- lca_model$posterior  # This is an NxK matrix (N = number of observations, K = number of classes)
-  
-  # Calculate entropy for each individual
-  entropy_individuals <- apply(post_probs, 1, function(p) {
-    -sum(p * log(p), na.rm = TRUE)  # Apply the entropy formula
-  })
-  
-  # Calculate the average entropy across all individuals
-  total_entropy <- mean(entropy_individuals)
-  
-  return(total_entropy)
-}
-
-##  stack overflow // https://daob.nl/wp-content/uploads/2015/07/ESRA-course-slides.pdf
-get_entropy<-function(mod){
-  entropy<-function(p)sum(-p*log(p),na.rm = T)
-  error_prior <- entropy(mod$P) # Class proportions
-  error_post <- mean(apply(mod$posterior, 1, entropy))
-  R2_entropy <- (error_prior - error_post) / error_prior
-  return(R2_entropy)
-  }
-
-
 
 sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
                     LL = c(m2$llik, m3$llik, m4$llik, m5$llik, m6$llik, m7$llik, m8$llik),
@@ -157,21 +185,31 @@ sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
                                 get_entropy(m8)))
 sumtab %>% knitr::kable()
 
+for (m in 2:8){
 
+  mod <- get(ls()[ls() %like% paste0("^m",m)])
+  png(filename = paste0("figures/LCA_testfigure_sub_mod",m,"_",DATE,".png"),
+      width = 12, height = 6, unit = "in", res = 300)
+  plot(mod)  
+  dev.off()
+  
+}
 
-png("figures/lca_test.png", width = 10, height = 6, units = "in", res = 300)
-par(mfrow = c(4, 2))
-plot(m2)
-plot(m3)
-plot(m4)
-plot(m5)
-plot(m6)
-plot(m7)
-#plot(m8)
-dev.off()
+lcamod <- am5
 
-lcamod <- m4
+data$class <- lcamod$predclass
+data[, mean(quant_tot, na.rm = T), by = class][order(class)]ö
 
+## RERUN WITH covariates
+#sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk,
+sex + age + edu2g + quant_group + purpose + castrisk, 
+
+f <- as.formula(paste0("cbind(",paste(
+  c("s_apo", "s_friends", "s_unbekannte", "s_dealer", "s_eigenanbau1", "s_eigenanbau2", "s_cav",
+    "s_online", "s_socmed", "s_noposs", "s_other"), collapse = ","), ")~ quant_group" ))
+set.seed(341)
+m4u <- poLCA(f, data = sub, nclass = 4, maxiter = 100000, nrep = 50)
+m5u <- poLCA(f, data = sub, nclass = 5, maxiter = 100000, nrep = 50)
 
 
 # ==================================================================================================================================================================
