@@ -16,7 +16,7 @@
 # clean workspace
 rm(list=ls())
 
-packages <- c("data.table", "ggplot2", "ggthemes", "Hmisc") 
+packages <- c("data.table", "ggplot2", "ggthemes", "Hmisc", "tidyr") 
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
@@ -124,6 +124,9 @@ data$SOURCE.11.open
 data$source_other <- data$SOURCE.9 == "ausgewählt" | data$SOURCE.11.open %like% "[a-zA-Z]"
 data[, table(SOURCE.11.open, source_other, useNA = "always")]
 data[, table(SOURCE.9, source_other, useNA = "always")]
+data[ID %in% c(223997,211379)] # only other but no information
+data[ID %in% c(223997,211379), source_other := T]
+
 #data$SOURCE.9 <- NULL
 #data$SOURCE.11.open <- NULL
 
@@ -135,16 +138,16 @@ data$source_homegrow_num <- as.numeric(data$source_homegrow)+1
 data$source_pharma_num <- as.numeric(data$source_pharma)+1
 data$source_other_num <- as.numeric(data$source_other)+1
 
-data$s_apo <- as.numeric(data$SOURCE.1)
+data$s_medical <- as.numeric(data$SOURCE.1)
 data$s_friends <- as.numeric(data$SOURCE.2)
-data$s_unbekannte <- as.numeric(data$SOURCE.3)
-data$s_dealer <- as.numeric(data$SOURCE.4)
-data$s_eigenanbau1 <- as.numeric(data$SOURCE.5_1)
-data$s_eigenanbau2 <- as.numeric(data$SOURCE.5_1)
-data$s_cav <- as.numeric(data$SOURCE.6)
+data$s_unknowns <- as.numeric(data$SOURCE.3)
+data$s_knowndealer <- as.numeric(data$SOURCE.4)
+data$s_homegrown_self <- as.numeric(data$SOURCE.5_1)
+data$s_homegrown_others <- as.numeric(data$SOURCE.5_1)
+data$s_cannabisclub <- as.numeric(data$SOURCE.6)
 data$s_online <- as.numeric(data$SOURCE.7)
-data$s_socmed <- as.numeric(data$SOURCE.8)
-data$s_noposs <- as.numeric(data$SOURCE.9)
+data$s_socialmedia <- as.numeric(data$SOURCE.8)
+data$s_no_possess <- as.numeric(data$SOURCE.9)
 data$s_other <- as.numeric(data$SOURCE.11.open %like% "[a-zA-Z]")+1
 
 

@@ -13,31 +13,9 @@
 # 0) ESSENTIALS
 # ______________________________________________________________________________________________________________________
 
-##  helper functions
-##  CHAT GPT (not used)
-calculate_entropy <- function(lca_model) {
-  # Extract posterior probabilities (individual class membership probabilities)
-  post_probs <- lca_model$posterior  # This is an NxK matrix (N = number of observations, K = number of classes)
-  
-  # Calculate entropy for each individual
-  entropy_individuals <- apply(post_probs, 1, function(p) {
-    -sum(p * log(p), na.rm = TRUE)  # Apply the entropy formula
-  })
-  
-  # Calculate the average entropy across all individuals
-  total_entropy <- mean(entropy_individuals)
-  
-  return(total_entropy)
-}
 
-##  stack overflow // https://daob.nl/wp-content/uploads/2015/07/ESRA-course-slides.pdf
-get_entropy<-function(mod){
-  entropy<-function(p)sum(-p*log(p),na.rm = T)
-  error_prior <- entropy(mod$P) # Class proportions
-  error_post <- mean(apply(mod$posterior, 1, entropy))
-  R2_entropy <- (error_prior - error_post) / error_prior
-  return(R2_entropy)
-}
+
+
 
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
@@ -54,6 +32,19 @@ source("0_prepare.R")
 input[, min(START)]
 input[, max(END)]
 
+
+##  some helper functions
+# -------------------------------------------------------
+
+##  entropy from stack overflow or this ppt: // https://daob.nl/wp-content/uploads/2015/07/ESRA-course-slides.pdf
+get_entropy<-function(mod){
+  entropy<-function(p)sum(-p*log(p),na.rm = T)
+  error_prior <- entropy(mod$P) # Class proportions
+  error_post <- mean(apply(mod$posterior, 1, entropy))
+  R2_entropy <- (error_prior - error_post) / error_prior
+  return(R2_entropy)
+}
+
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
@@ -67,7 +58,6 @@ input[, max(END)]
 data[, table(can12m)] # 1490
 data[, table(can30d)] # 1074
 
-
 ## 2.2) Frequency of Sources
 #-------------------------------------------------------
 
@@ -77,34 +67,24 @@ data[can12m == T, mean(source_homegrow)] # 38.5%
 data[can12m == T, mean(source_pharma)] # 16.6%
 data[can12m == T, mean(source_other)] # 13.1%
 
+table(rowSums(data[can12m == T, .(source_illegal, source_social, 
+                            source_homegrow, source_pharma, source_other)]))
+# (378+92+4)/1490 = 31.8%
+
 data[regsample == T, mean(source_illegal)] # 39.4%
 data[regsample == T, mean(source_social)] # 35.7%
 data[regsample == T, mean(source_homegrow)] # 48.3%
 data[regsample == T, mean(source_pharma)] # 19.8%
 data[regsample == T, mean(source_other)] # 5.8%
 
-## 2.3) Regression
+## 2.3) LCA
 #-------------------------------------------------------
 
-mod1 <- glm(source_illegal ~ sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk, family = "binomial", data = data[regsample==T])
-mod2 <- glm(source_social ~ sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk, family = "binomial", data = data[regsample==T])
-mod3 <- glm(source_homegrow ~ sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk, family = "binomial", data = data[regsample==T])
-mod4 <- glm(source_pharma ~ sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk, family = "binomial", data = data[regsample==T])
-mod5 <- glm(source_other ~ sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk, family = "binomial", data = data[regsample==T])
-
-summary(mod1)
-summary(mod2)
-summary(mod3)
-summary(mod4)
-summary(mod5)
-
-## 2.4) LCA ALL PEOPLE
-#-------------------------------------------------------
 library(poLCA)
 
 f <- as.formula(paste0("cbind(",paste(
-  c("s_apo", "s_friends", "s_unbekannte", "s_dealer", "s_eigenanbau1", "s_eigenanbau2", "s_cav",
-    "s_online", "s_socmed", "s_noposs", "s_other"), collapse = ","), ")~1" ))
+  c("s_medical", "s_friends", "s_unknowns", "s_knowndealer", "s_homegrown_self", "s_homegrown_others", "s_cannabisclub",
+    "s_online", "s_socialmedia", "s_no_possess", "s_other"), collapse = ","), ")~1" ))
 set.seed(341)
 am2 <- poLCA(f, data = data, nclass = 2, maxiter = 100000, nrep = 50)
 am3 <- poLCA(f, data = data, nclass = 3, maxiter = 100000, nrep = 50)
@@ -130,7 +110,7 @@ sumtab %>% knitr::kable()
 for (m in 2:8){
   
   mod <- get(ls()[ls() %like% paste0("^am",m)])
-  png(filename = paste0("figures/LCA_testfigure_all_mod",m,"_",DATE,".png"),
+  png(filename = paste0("figures/LCA_mod_",m,"_classes_",DATE,".png"),
       width = 12, height = 6, unit = "in", res = 300)
   plot(mod)  
   dev.off()
@@ -139,77 +119,52 @@ for (m in 2:8){
 
 lcamod_all <- am5
 
-data$class <- NA_character_
-data[can12m == T]$class <- lcamod_all$predclass
-data[, mean(quant_tot, na.rm = T), by = class][order(class)]
 
-
-
-## 2.5) LCA SUB SAMPLE
+## 2.4) Cannabis sourcing and use quantities
 #-------------------------------------------------------
 
-library(poLCA)
-sub <- data[regsample==T & sex != "other"]
-#sub <- data[sex != "other"]
-#sub$sex <- factor(sub$sex)
-#sub[, edu2g := factor(ifelse(edu %like% "low|mid", "lowmid", "high"))]
-#sub[, table(edu,edu2g)]
+data$class <- NULL
+data$class <- NA_character_
+data[can12m == T]$class <- lcamod_all$predclass
+
+data$class <- factor(data$class, levels = 1:5, 
+                     labels = c(
+                       "NO-POSESS",
+                       "ILLEGAL",
+                       "HOMEGROW",
+                       "SOCIAL",
+                       "MEDICAL"))
+
+data$class <- factor(data$class,
+                     levels = c(
+                       "ILLEGAL",
+                       "SOCIAL",
+                       "HOMEGROW",
+                       "MEDICAL",
+                       "NO-POSESS"))
+
+data[regsample == T, .(.N,prop = .N/nrow(data[regsample == T])), by = class]
+data[regsample == T, mean(quant_tot), by = class][order(class)]
+data[regsample == T, median(quant_tot), by = class][order(class)]
+
+ggplot(data[regsample == T], aes(x = quant_tot)) + 
+  geom_histogram()
+
+mean(data[regsample == T]$quant_tot)
+var(data[regsample == T]$quant_tot)
+
+# negative binomial
+testquant <- glm.nb(quant_tot ~ class, data[regsample == T])
+summary(testquant)
+
+# total quantities by class
+temp  <- data[regsample == T,.(ID, class, quant_tot, weights)]
+temp[, wt_tot := sum(quant_tot*weights)]
+temp[, wt_class := sum(quant_tot*weights), by = class]
+unique(temp[, .(class,prop = wt_class/wt_tot)])
 
 
-## RUN
-#f <- as.formula(paste0("cbind(",paste(
-#  c("source_illegal_num", "source_social_num", "source_homegrow_num", "source_pharma_num", "source_other_num")
-#  , collapse = ","), ")~1" ))
-f <- as.formula(paste0("cbind(",paste(
-  c("s_apo", "s_friends", "s_unbekannte", "s_dealer", "s_eigenanbau1", "s_eigenanbau2", "s_cav",
-    "s_online", "s_socmed", "s_noposs", "s_other"), collapse = ","), ")~1" ))
-set.seed(341)
-m2 <- poLCA(f, data = sub, nclass = 2, maxiter = 100000, nrep = 50)
-m3 <- poLCA(f, data = sub, nclass = 3, maxiter = 100000, nrep = 50)
-m4 <- poLCA(f, data = sub, nclass = 4, maxiter = 100000, nrep = 50)
-m5 <- poLCA(f, data = sub, nclass = 5, maxiter = 100000, nrep = 50)
-m6 <- poLCA(f, data = sub, nclass = 6, maxiter = 100000, nrep = 50)
-m7 <- poLCA(f, data = sub, nclass = 7, maxiter = 100000, nrep = 50)
-m8 <- poLCA(f, data = sub, nclass = 8, maxiter = 100000, nrep = 50)
 
-sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
-                    LL = c(m2$llik, m3$llik, m4$llik, m5$llik, m6$llik, m7$llik, m8$llik),
-                    AIC = c(m2$aic, m3$aic, m4$aic, m5$aic, m6$aic, m7$aic, m8$aic),
-                    BIC = c(m2$bic, m3$bic, m4$bic, m5$bic, m6$bic, m7$bic, m8$bic), 
-                    Entropy = c(get_entropy(m2), 
-                                get_entropy(m3),
-                                get_entropy(m4),
-                                get_entropy(m5),
-                                get_entropy(m6),
-                                get_entropy(m7),
-                                get_entropy(m8)))
-sumtab %>% knitr::kable()
-
-for (m in 2:8){
-
-  mod <- get(ls()[ls() %like% paste0("^m",m)])
-  png(filename = paste0("figures/LCA_testfigure_sub_mod",m,"_",DATE,".png"),
-      width = 12, height = 6, unit = "in", res = 300)
-  plot(mod)  
-  dev.off()
-  
-}
-
-lcamod <- am5
-
-data$class <- lcamod$predclass
-data[, mean(quant_tot, na.rm = T), by = class][order(class)]ö
-
-## RERUN WITH covariates
-#sex + agegroup + edu + freq30d_group + quant_pd_group + purpose + castrisk,
-sex + age + edu2g + quant_group + purpose + castrisk, 
-
-f <- as.formula(paste0("cbind(",paste(
-  c("s_apo", "s_friends", "s_unbekannte", "s_dealer", "s_eigenanbau1", "s_eigenanbau2", "s_cav",
-    "s_online", "s_socmed", "s_noposs", "s_other"), collapse = ","), ")~ quant_group" ))
-set.seed(341)
-m4u <- poLCA(f, data = sub, nclass = 4, maxiter = 100000, nrep = 50)
-m5u <- poLCA(f, data = sub, nclass = 5, maxiter = 100000, nrep = 50)
 
 
 # ==================================================================================================================================================================
@@ -263,29 +218,50 @@ summary(glm(castrisk ~ regsample,family = "binomial", data[can12m == T])) # more
 # colors
 color_2 <- c("#FF6666", "#66ffff")
 color_4 <- c("#9b3721","#489b21","#21859b","#74219b")
+color_6 <- c("#f39c12","#2ecc71","#16a085","#3498db","#8e44ad","#e74c3c")
+color_5 <- c("#4e0a39", "#c2154a", "#eb8102", "#f8cb00", "#929d0e")
+
 
 ## 3.1) LCA plot
 #-------------------------------------------------------
 
 # prepare data
-pdat <- as.data.frame(lcamod$probs)
+pdat <- as.data.frame(lcamod_all$probs)
 pdat <- melt(data.table(class  = rownames(pdat), pdat), id.vars = "class")
 pdat <- pdat[stringr::str_sub(variable, -2,-2) == 2]
 pdat[, class := stringr::str_sub(class, 7,7)]
 pdat[, source := stringr::str_sub(variable, 3,-7)]
 pdat[, prob := round(value,10)]
 pdat <- pdat[,.(class,source,prob)]
-pdat$source <- factor(pdat$source, c("apo", "friends", "unbekannte",
-                                      "dealer", "online", "socmed",
-                                      "eigenanbau1", "eigenanbau2", "cav",
-                                       "noposs", "other"))
+pdat$source <- factor(pdat$source, c("knowndealer","unknowns","online","socialmedia",
+                                     "friends", 
+                                     "cannabisclub",
+                                     "homegrown_self", "homegrown_others", 
+                                     "medical",
+                                     "no_possess", "other"))
 
-class_p <- lcamod$P
+pdat$class <- factor(pdat$class, levels = 1:5, 
+                     labels = c(
+                       "NO-POSESS",
+                       "ILLEGAL",
+                       "HOMEGROW",
+                       "SOCIAL",
+                       "MEDICAL"))
+
+class_p <- lcamod_all$P
 pdat$class_lab <- NA_character_
 for(c in 1:length(class_p)){
-  pdat[class == c, class_lab := paste0(c, " (",round(class_p[c],3)*100,"%)")]    
+  pdat[class == levels(pdat$class)[c], 
+       ':=' (class_lab = paste0(levels(pdat$class)[c],
+                           " (",
+                           round(class_p[c],3)*100,"%)"),
+             class_prop = class_p[c])]    
+  
 }
-
+pdat$class_lab
+levelorder <- unique(pdat[order(class_prop, decreasing = T)]$class_lab)
+pdat$class_lab <- factor(pdat$class_lab, 
+                         levels = levelorder)
 
 # generate plot
 ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
@@ -305,13 +281,20 @@ ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
     panel.grid.minor.y = element_blank()) +
   guides(color = guide_legend(nrow = 1), linetype = guide_legend(nrow = 1)) +
   scale_x_discrete("") +
-  scale_color_manual("classes (population share)", values = color_4) +
+  scale_color_manual("classes (population share)", values = color_5) +
   #scale_linetype_manual(values = linetype_values, labels = label_values) +
   scale_y_continuous("% Response probability within each class", breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
 
-ggsave(paste0("figures/LCA_testfigure_",DATE,".png"), height = 6, width = 10)
+ggsave(paste0("figures/LCA_probabilities_",DATE,".png"), height = 6, width = 10)
 
-## 3.2) Prevalence use by sex and edu
+## 3.2) Jitter
 #-------------------------------------------------------
 
+pdat <- data[regsample == T, .(class, quant_tot)]
+
+ggplot(pdat, aes(x = class, y = quant_tot)) + 
+  geom_jitter(alpha = 0.5) + 
+  geom_boxplot(alpha = 0.5)
+
+ggsave(paste0("figures/QUANT JITTER_",DATE,".png"), height = 6, width = 10)
 
