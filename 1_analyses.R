@@ -61,21 +61,34 @@ data[, table(can30d)] # 1074
 ## 2.2) Frequency of Sources
 #-------------------------------------------------------
 
-data[can12m == T, mean(source_illegal)] # 35.2%
-data[can12m == T, mean(source_social)] # 35.0%
-data[can12m == T, mean(source_homegrow)] # 38.5%
-data[can12m == T, mean(source_pharma)] # 16.6%
-data[can12m == T, mean(source_other)] # 13.1%
+data[can12m == T, wtd.mean(source_illegal, weights)] # 38.1%
+data[can12m == T, wtd.mean(source_social, weights)] # 34.9%
+data[can12m == T, wtd.mean(source_homegrow, weights)] # 39.4%
+data[can12m == T, wtd.mean(source_pharma, weights)] # 17.8%
+data[can12m == T, wtd.mean(source_other, weights)] # 12.5%
 
 table(rowSums(data[can12m == T, .(source_illegal, source_social, 
                             source_homegrow, source_pharma, source_other)]))
 # (378+92+4)/1490 = 31.8%
 
-data[regsample == T, mean(source_illegal)] # 39.4%
-data[regsample == T, mean(source_social)] # 35.7%
-data[regsample == T, mean(source_homegrow)] # 48.3%
-data[regsample == T, mean(source_pharma)] # 19.8%
-data[regsample == T, mean(source_other)] # 5.8%
+data[can12m == T, wtd.mean(source_homegrow == T | source_pharma == T, weights)] # 50.4%
+
+
+# STRICTLY LEGAL
+data[can12m == T, mean(only_homegrow == T)]
+data[can12m == T, wtd.mean(only_homegrow == T, weights)]
+data[can12m == T, mean(only_medical == T)]
+data[can12m == T, wtd.mean(only_medical == T, weights)]
+data[can12m == T, mean(only_homegrow_or_medical == T)]
+data[can12m == T, wtd.mean(only_homegrow_or_medical == T, weights)]
+
+# subsample
+data[regsample == T, wtd.mean(source_illegal, weights)] # 41.7%
+data[regsample == T, wtd.mean(source_social, weights)] # 35.2%
+data[regsample == T, wtd.mean(source_homegrow, weights)] # 49.1%
+data[regsample == T, wtd.mean(source_pharma, weights)] # 21.3%
+data[regsample == T, wtd.mean(source_other, weights)] # 5.3%
+
 
 ## 2.3) LCA
 #-------------------------------------------------------
@@ -94,58 +107,126 @@ am6 <- poLCA(f, data = data, nclass = 6, maxiter = 100000, nrep = 50)
 am7 <- poLCA(f, data = data, nclass = 7, maxiter = 100000, nrep = 50)
 am8 <- poLCA(f, data = data, nclass = 8, maxiter = 100000, nrep = 50)
 
-sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
-                    LL = c(am2$llik, am3$llik, am4$llik, am5$llik, am6$llik, am7$llik, am8$llik),
-                    AIC = c(am2$aic, am3$aic, am4$aic, am5$aic, am6$aic, am7$aic, am8$aic),
-                    BIC = c(am2$bic, am3$bic, am4$bic, am5$bic, am6$bic, am7$bic, am8$bic), 
-                    Entropy = c(get_entropy(am2), 
-                                get_entropy(am3),
-                                get_entropy(am4),
-                                get_entropy(am5),
-                                get_entropy(am6),
-                                get_entropy(am7),
-                                get_entropy(am8)))
-sumtab %>% knitr::kable()
+run <- T
 
-for (m in 2:8){
+if(run == T){
+
+  sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
+                      LL = c(am2$llik, am3$llik, am4$llik, am5$llik, am6$llik, am7$llik, am8$llik),
+                      AIC = c(am2$aic, am3$aic, am4$aic, am5$aic, am6$aic, am7$aic, am8$aic),
+                      BIC = c(am2$bic, am3$bic, am4$bic, am5$bic, am6$bic, am7$bic, am8$bic), 
+                      Entropy = c(get_entropy(am2), 
+                                  get_entropy(am3),
+                                  get_entropy(am4),
+                                  get_entropy(am5),
+                                  get_entropy(am6),
+                                  get_entropy(am7),
+                                  get_entropy(am8)))
+  sumtab %>% knitr::kable()
   
-  mod <- get(ls()[ls() %like% paste0("^am",m)])
-  png(filename = paste0("figures/LCA_mod_",m,"_classes_",DATE,".png"),
-      width = 12, height = 6, unit = "in", res = 300)
-  plot(mod)  
-  dev.off()
+  for (m in 2:8){
+    
+    mod <- get(ls()[ls() %like% paste0("^am",m)])
+    png(filename = paste0("figures/LCA_mod_",m,"_classes_",DATE,".png"),
+        width = 12, height = 6, unit = "in", res = 300)
+    plot(mod)  
+    dev.off()
+    
+  }
   
 }
 
-lcamod_all <- am5
+lcamod_all <- am7
 
-
-## 2.4) Cannabis sourcing and use quantities
-#-------------------------------------------------------
-
-data$class <- NULL
+##  add classes
+#data$class <- NULL
 data$class <- NA_character_
 data[can12m == T]$class <- lcamod_all$predclass
 
-data$class <- factor(data$class, levels = 1:5, 
+#"NO-POSESS",
+#"ILLEGAL",
+#"HOMEGROW",
+#"SOCIAL",
+#"MEDICAL"
+
+data$class <- factor(data$class, levels = 1:7, 
                      labels = c(
-                       "NO-POSESS",
-                       "ILLEGAL",
-                       "HOMEGROW",
                        "SOCIAL",
-                       "MEDICAL"))
+                       "MEDICAL",
+                       "ILLEGAL",
+                       "OTHER",
+                       "NO-POSESS",
+                       "MIX",
+                       "HOMEGROW"))
 
 data$class <- factor(data$class,
                      levels = c(
-                       "ILLEGAL",
+                       "MIX",
                        "SOCIAL",
+                       "ILLEGAL",
                        "HOMEGROW",
                        "MEDICAL",
-                       "NO-POSESS"))
+                       "NO-POSESS",
+                       "OTHER"))
 
-data[regsample == T, .(.N,prop = .N/nrow(data[regsample == T])), by = class]
-data[regsample == T, mean(quant_tot), by = class][order(class)]
-data[regsample == T, median(quant_tot), by = class][order(class)]
+data[, prop.table(table(class))]
+class_props <- data[!is.na(class), .(weighted_sum = sum(weights)), by = class][
+  , .(class,weighted_prop = weighted_sum / sum(weighted_sum))][order(class)]
+
+
+## 2.4) Multinomial regression
+#-------------------------------------------------------
+
+vars <- names(data)[names(data) %like% "sex|agegr|edu|distress|health|freq12m|purpose|prescribed|castrisk"]
+f <- as.formula(paste0("class ~ ", paste0(vars, collapse = " + ")))
+
+sub <- copy(data[can12m == T & sex != "other"])
+sub$sex <-factor(sub$sex)
+sub$edu <-relevel(sub$edu, ref = "mid")
+
+mnmod <- multinom(formula = f,data = sub)
+summary(mnmod)
+
+#tab2 <- gtsummary::tbl_regression(mnmod, exponentiate = TRUE)
+
+set.seed(924)
+    
+# Risk Ratios
+rs <- as.data.frame(exp(coef(mnmod))) 
+rs <- data.table(class = rownames(rs), rs)
+rs <- melt(rs, id.vars = c("class"), value.name = "riskratio")[order(class,variable)]
+
+# confidence intervals:
+ci <- as.data.table(round(exp(confint(mnmod)),3))
+names(ci) <- c("variable","bound","class","value")
+ci <- dcast(ci, class + variable ~ bound)
+ci$ci <- paste0(ci$'2.5 %'," to ", ci$'97.5 %')
+
+# p values
+sm <- summary(mnmod)
+z <- summary(mnmod)$coefficients/summary(mnmod)$standard.errors
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+p <- data.table(class = rownames(p), p)
+p <- melt(p, id.vars = c("class"), value.name = "p")[order(class,variable)]
+
+regout <- merge(rs, ci, by = c("class","variable"))
+regout <- merge(regout, p, by = c("class","variable"))
+
+kable(regout[,.(class,variable,riskratio,ci,p)]) %>%
+  kable_styling() %>%
+  save_kable(file = "tabs/sup_tab1.html")
+
+
+## 2.5) Cannabis sourcing and use quantities
+#-------------------------------------------------------
+
+data[regsample == T, prop.table(table(class))]
+data[regsample == T, .(weighted_sum = sum(weights)), by = class][
+  , .(class,weighted_prop = weighted_sum / sum(weighted_sum))][order(class)]
+
+
+# mean/median
+data[regsample == T, .(mean = wtd.mean(quant_tot, weights), median = median(quant_tot)), by = class][order(mean)]
 
 ggplot(data[regsample == T], aes(x = quant_tot)) + 
   geom_histogram()
@@ -161,7 +242,16 @@ summary(testquant)
 temp  <- data[regsample == T,.(ID, class, quant_tot, weights)]
 temp[, wt_tot := sum(quant_tot*weights)]
 temp[, wt_class := sum(quant_tot*weights), by = class]
-unique(temp[, .(class,prop = wt_class/wt_tot)])
+temp <- unique(temp[, .(class,prop = wt_class/wt_tot)])[order(prop)]
+
+#social+medical+homegrow:
+temp[class %like% "SOCIAL|MEDICAL|HOMEGROW", sum(prop)]
+
+# mean/median €
+data[regsample == T, .(mean = wtd.mean(spend_monthly, weights), median = median(spend_monthly)), by = class][order(mean)]
+
+ggplot(data[regsample == T], aes(x = spend_monthly)) + 
+  geom_histogram()
 
 
 
@@ -177,19 +267,17 @@ unique(temp[, .(class,prop = wt_class/wt_tot)])
 ## 3.1) TABLE 1
 #-------------------------------------------------------
 
-library(tableone)
-library(knitr)
-library(kableExtra)
-
-vars <- names(data)[names(data) %like% "sex|age|edu|freq12m|freq30d|quant_pd|purpose|castrisk"]
+vars <- names(data)[names(data) %like% "sex|age|edu|freq12m|freq30d|quant_pd|earlyonset|purpose|prescribed|castrisk|distress|health"]
 
 table1a <- CreateTableOne(data = data[can12m == T,.SD, .SDcols = vars])
 table1a_df <- as.data.frame(print(table1a))
+#table1a_df <- as.data.table(print(table1a))
 
 table1b <- CreateTableOne(data = data[regsample == T,.SD, .SDcols = vars])
 table1b_df <- as.data.frame(print(table1b))
+#table1b_df <- as.data.table(print(table1b))
 
-out <- cbind(table1a_df,table1b_df)
+out <- cbind(table1a_df, table1b_df)
 
 kable(out) %>%
   kable_styling() %>%
@@ -203,8 +291,13 @@ summary(glm(sex == "men" ~ regsample,family = "binomial", data[can12m == T])) # 
 summary(glm(edu == "mid" ~ regsample,family = "binomial", data[can12m == T])) # more mid edu
 summary(glm(edu == "high" ~ regsample,family = "binomial", data[can12m == T])) # more high edu
 summary(glm(freq30d ~ regsample,family = "gaussian", data[can12m == T])) # more use days
+summary(glm(earlyonset ~ regsample,family = "binomial", data[can12m == T])) # earlier onset
 summary(glm(purpose == "only medical" ~ regsample,family = "binomial", data[can12m == T])) # less only medical 
+summary(glm(prescribed ~ regsample,family = "binomial", data[can12m == T])) # more prescription
 summary(glm(castrisk ~ regsample,family = "binomial", data[can12m == T])) # more castrisk
+summary(glm(distress ~ regsample,family = "binomial", data[can12m == T])) # no diff
+summary(glm(health_good ~ regsample,family = "binomial", data[can12m == T])) # no diff
+summary(glm(health_chronic ~ regsample,family = "binomial", data[can12m == T])) # no diff
 
 
 
@@ -220,6 +313,7 @@ color_2 <- c("#FF6666", "#66ffff")
 color_4 <- c("#9b3721","#489b21","#21859b","#74219b")
 color_6 <- c("#f39c12","#2ecc71","#16a085","#3498db","#8e44ad","#e74c3c")
 color_5 <- c("#4e0a39", "#c2154a", "#eb8102", "#f8cb00", "#929d0e")
+color_7 <- c("#4e0a39", "#c2154a", "#eb8102", "#f8cb00", "#929d0e", "#007c5f", "#004b7d")
 
 
 ## 3.1) LCA plot
@@ -240,22 +334,27 @@ pdat$source <- factor(pdat$source, c("knowndealer","unknowns","online","socialme
                                      "medical",
                                      "no_possess", "other"))
 
-pdat$class <- factor(pdat$class, levels = 1:5, 
+pdat$class <- factor(pdat$class, levels = 1:7, 
                      labels = c(
-                       "NO-POSESS",
-                       "ILLEGAL",
-                       "HOMEGROW",
                        "SOCIAL",
-                       "MEDICAL"))
+                       "MEDICAL",
+                       "ILLEGAL",
+                       "OTHER",
+                       "NO-POSESS",
+                       "MIX",
+                       "HOMEGROW"))
 
-class_p <- lcamod_all$P
+#class_p <- lcamod_all$P
 pdat$class_lab <- NA_character_
 for(c in 1:length(class_p)){
+  
+  lab <- levels(pdat$class)[c]
   pdat[class == levels(pdat$class)[c], 
-       ':=' (class_lab = paste0(levels(pdat$class)[c],
+       ':=' (class_lab = paste0(lab,
                            " (",
-                           round(class_p[c],3)*100,"%)"),
-             class_prop = class_p[c])]    
+                           round(class_props[class == lab]$weighted_prop,3)*100,"%)"),
+             class_prop = class_props[class == lab]$weighted_prop)]    
+  rm(lab)
   
 }
 pdat$class_lab
@@ -279,22 +378,65 @@ ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
     legend.position = "bottom",
     panel.grid.major.x = element_blank(),
     panel.grid.minor.y = element_blank()) +
-  guides(color = guide_legend(nrow = 1), linetype = guide_legend(nrow = 1)) +
+  guides(color = guide_legend(nrow = 2), linetype = guide_legend(nrow = 1)) +
   scale_x_discrete("") +
-  scale_color_manual("classes (population share)", values = color_5) +
+  scale_color_manual("classes (population share)", values = color_7) +
   #scale_linetype_manual(values = linetype_values, labels = label_values) +
-  scale_y_continuous("% Response probability within each class", breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
+  scale_y_continuous("% Response probability\nwithin each class", 
+                     breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
 
-ggsave(paste0("figures/LCA_probabilities_",DATE,".png"), height = 6, width = 10)
+ggsave(paste0("figures/LCA_probabilities_",DATE,".png"), height = 6, width = 12)
 
-## 3.2) Jitter
+## 3.2) Forest plot
 #-------------------------------------------------------
 
-pdat <- data[regsample == T, .(class, quant_tot)]
+pdat <- regout[,.(class,variable,riskratio,lower = `2.5 %`,upper = `97.5 %`)]
+pdat$class <- factor(pdat$class, levels = levels(data$class)[2:7])
 
-ggplot(pdat, aes(x = class, y = quant_tot)) + 
-  geom_jitter(alpha = 0.5) + 
-  geom_boxplot(alpha = 0.5)
+var_levels <- unique(pdat$variable)
+var_levels <- c(var_levels[var_levels %like% "Intercept"],
+                var_levels[var_levels %like% "sex"],
+                var_levels[var_levels %like% "agegr"],
+                var_levels[var_levels %like% "edu"],
+                var_levels[var_levels %like% "monthly"],
+                var_levels[var_levels %like% "weekly"],
+                var_levels[var_levels %like% "daily"],
+                var_levels[var_levels %like% "purpose"],
+                var_levels[var_levels %like% "prescr"],
+                var_levels[var_levels %like% "cast"],
+                var_levels[var_levels %like% "health"],
+                var_levels[var_levels %like% "distress"])
+pdat$variable <- factor(pdat$variable, rev(var_levels))
+                
+ggplot(pdat, aes(x = variable, y = riskratio, color = class)) + 
+  geom_hline(yintercept = 1) +
+  geom_point(position = position_dodge(0.7)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width = 0, position = position_dodge(0.7)) +
+  scale_y_continuous(transform = "log10") +
+  scale_color_manual(values = color_7[2:7]) +
+  coord_flip() 
+  #theme(legend.position = "bottom") + 
+  #guides(guide_color = nrow(2))
 
-ggsave(paste0("figures/QUANT JITTER_",DATE,".png"), height = 6, width = 10)
+
+ggsave(paste0("figures/Forest plot_",DATE,".png"), height = 6, width = 8)
+
+
+
+## 3.3) Jitter
+#-------------------------------------------------------
+
+pdat <- data[regsample == T, .(class, quant_tot, weights)]
+pdat[, weight := sum(weights), by = class]
+
+ggplot(pdat, aes(x = class, y = quant_tot, fill = class)) + 
+  geom_jitter(alpha = 0.3, show.legend = F) + 
+  #geom_boxplot(alpha = 0.8, show.legend = F) + 
+  geom_violin(alpha = 0.8, show.legend = F) + 
+  scale_x_discrete("") + 
+  scale_y_continuous("30-day cannabis use quanties\n(logarithmized)", trans = "log10") + 
+  scale_fill_manual(values = color_7)
+
+ggsave(paste0("figures/QUANT JITTER_",DATE,".png"), height = 5, width = 8)
 

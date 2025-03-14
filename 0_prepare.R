@@ -16,7 +16,9 @@
 # clean workspace
 rm(list=ls())
 
-packages <- c("data.table", "ggplot2", "ggthemes", "Hmisc", "tidyr") 
+packages <- c("data.table", "ggplot2", "ggthemes",
+              "Hmisc", "tidyr", "nnet",
+              "tableone", "knitr", "kableExtra")
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
@@ -37,13 +39,13 @@ options(scipen = 999)
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
 
-# 1) LOAD DATA (version 26 Feb 2025 v2)
+# 1) LOAD DATA (version 11 Mar 2025)
 # ______________________________________________________________________________________________________________________
 
 ##  Germany WAVE 2
 # -------------------------------------------------------
 
-path <- file.path("data", "20250226v2","full_GER_wave2_cleaned_20250226.rds")
+path <- file.path("data", "20250311","full_GER_wave2_cleaned_20250311.rds")
 input <- data.table(readRDS(file = path))
 
 
@@ -71,9 +73,13 @@ data <- copy(input[,.(ID, weights,
                       can_freq,
                       ndays_flowers,ndays_resin,ndays_edibles,ndays_concentrate_liquids,
                       QUANT.1,QUANT.2,QUANT.3,QUANT.4,
-                      MEDICALUSE.01,
+                      spend_monthly,
+                      age_firstuse,
+                      MEDICALUSE.01,MEDICALUSE.02,
                       CAST_score_full,
                       alcohol_freq,AUDITC2,AUDITC3,
+                      HEALTH.01,HEALTH.02,
+                      DISTRESS_total,
                       SOURCE.1,SOURCE.2,SOURCE.3,SOURCE.4,SOURCE.5_1,SOURCE.5_2,
                       SOURCE.6,SOURCE.7,SOURCE.8,SOURCE.9,SOURCE.11.open)])
 
@@ -143,13 +149,20 @@ data$s_friends <- as.numeric(data$SOURCE.2)
 data$s_unknowns <- as.numeric(data$SOURCE.3)
 data$s_knowndealer <- as.numeric(data$SOURCE.4)
 data$s_homegrown_self <- as.numeric(data$SOURCE.5_1)
-data$s_homegrown_others <- as.numeric(data$SOURCE.5_1)
+data$s_homegrown_others <- as.numeric(data$SOURCE.5_2)
 data$s_cannabisclub <- as.numeric(data$SOURCE.6)
 data$s_online <- as.numeric(data$SOURCE.7)
 data$s_socialmedia <- as.numeric(data$SOURCE.8)
 data$s_no_possess <- as.numeric(data$SOURCE.9)
 data$s_other <- as.numeric(data$SOURCE.11.open %like% "[a-zA-Z]")+1
 
+##  ONLY homegrow and no other source
+data$temp <- rowSums(data[,.SD, .SDcols = names(data)[names(data) %like% "^s_"]])
+data[, only_homegrow := ifelse(s_homegrown_self == 2 & temp == 12, T, F)]
+data[, only_medical := ifelse(s_medical == 2 & temp == 12, T, F)]
+data[, only_homegrow_or_medical := ifelse(s_homegrown_self == 2 & s_medical == 2 & temp == 13, T, F)]
+data[, table(only_homegrow,only_medical)]
+data[, table(only_homegrow,only_homegrow_or_medical)]
 
 
 ## 2.3) define COVARIATES - SOCIODEMOGRAPHICS
@@ -240,16 +253,43 @@ levels(data$quant_pd_group) <- gsub(","," to <=",levels(data$quant_pd_group))
 levels(data$quant_pd_group) <- gsub("\\(",">",levels(data$quant_pd_group))
 levels(data$quant_pd_group) <- gsub("\\]|\\[","",levels(data$quant_pd_group))
 
+##  SPEND
+data$spend_monthly
+summary(data$spend_monthly)
+
+##  AGE ONSET
+data$age_firstuse
+data[, earlyonset := age_firstuse <=16]
+data[, table(age_firstuse,earlyonset)]
+
 ##  MEDICAL
 data$MEDICALUSE.01
 data$purpose <- factor(data$MEDICALUSE.01)
 levels(data$purpose)  <- c("only medical","medical and non-medical", "only non-medical")
+data$purpose <- factor(data$purpose, levels = c("only non-medical","medical and non-medical","only medical"))
 data$MEDICALUSE.01 <- NULL
 table(data$purpose)
+
+##  PRESCRIPTION
+data$MEDICALUSE.02
+#data[, prescribed := factor(MEDICALUSE.02)]
+data[!is.na(MEDICALUSE.02), prescribed := ifelse(MEDICALUSE.02 %like% "Ja, mir wurde medizinisches", T, F)]
+data[, table(prescribed)]
 
 ##  CAST
 data[, table(CAST_score_full)]
 data[, castrisk := CAST_score_full >= 7]
+
+##  HEALTH
+data[, table(HEALTH.01, HEALTH.02)]
+data[, prop.table(table(HEALTH.01, HEALTH.02),1)]
+data[, health_good := HEALTH.01 >= 2]
+data[, health_chronic := HEALTH.02 == 1]
+
+##  DISTRESS
+data[, table(DISTRESS_total)]
+data[!is.na(DISTRESS_total), distress := DISTRESS_total >= 13]
+data$DISTRESS_total <- NULL
 
 ## 2.5) define SAMPLE FOR REGRESSION
 #-------------------------------------------------------
