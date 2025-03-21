@@ -39,15 +39,16 @@ options(scipen = 999)
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
 
-# 1) LOAD DATA (version 11 Mar 2025)
+# 1) LOAD DATA (version 20 Mar 2025)
 # ______________________________________________________________________________________________________________________
 
 ##  Germany WAVE 2
 # -------------------------------------------------------
 
-path <- file.path("data", "20250311","full_GER_wave2_cleaned_20250311.rds")
+path <- file.path("data", "20250320","full_GER_wave2_cleaned_20250320.rds")
 input <- data.table(readRDS(file = path))
 
+nrow(input) # 11578
 
 # GSZB2 = Grundstichprobe Zwischenbericht 2
 # ZS = Zielstichprobe
@@ -70,6 +71,8 @@ data <- copy(input[,.(ID, weights,
                       age = age_in_years,
                       agegroup = agegroup_basicsample,
                       edu = edu_group,
+                      gisd_k,
+                      DEGURBA = DGURBA,
                       can_freq,
                       ndays_flowers,ndays_resin,ndays_edibles,ndays_concentrate_liquids,
                       QUANT.1,QUANT.2,QUANT.3,QUANT.4,
@@ -144,7 +147,7 @@ data$source_homegrow_num <- as.numeric(data$source_homegrow)+1
 data$source_pharma_num <- as.numeric(data$source_pharma)+1
 data$source_other_num <- as.numeric(data$source_other)+1
 
-data$s_medical <- as.numeric(data$SOURCE.1)
+data$s_pharmacy <- as.numeric(data$SOURCE.1)
 data$s_friends <- as.numeric(data$SOURCE.2)
 data$s_unknowns <- as.numeric(data$SOURCE.3)
 data$s_knowndealer <- as.numeric(data$SOURCE.4)
@@ -159,8 +162,8 @@ data$s_other <- as.numeric(data$SOURCE.11.open %like% "[a-zA-Z]")+1
 ##  ONLY homegrow and no other source
 data$temp <- rowSums(data[,.SD, .SDcols = names(data)[names(data) %like% "^s_"]])
 data[, only_homegrow := ifelse(s_homegrown_self == 2 & temp == 12, T, F)]
-data[, only_medical := ifelse(s_medical == 2 & temp == 12, T, F)]
-data[, only_homegrow_or_medical := ifelse(s_homegrown_self == 2 & s_medical == 2 & temp == 13, T, F)]
+data[, only_medical := ifelse(s_pharmacy == 2 & temp == 12, T, F)]
+data[, only_homegrow_or_medical := ifelse(s_homegrown_self == 2 & s_pharmacy == 2 & temp == 13, T, F)]
 data[, table(only_homegrow,only_medical)]
 data[, table(only_homegrow,only_homegrow_or_medical)]
 
@@ -178,6 +181,17 @@ data[, table(age,agegroup, useNA = "always")]
 
 ##  EDUCATION
 data$edu
+
+##  DEGURBA
+data$DEGURBA
+data[, prop.table(table(can_freq, DEGURBA),2)]
+
+##  GISD
+input[, table(gisd_5,gisd_k)]
+input[, mean(gisd_score), by = gisd_k] # 1 = low deprivation, 3 = high deprivation
+data$gisd_k <- factor(data$gisd_k, levels = c(1,2,3), labels = c("low","mid","high"))
+data[, prop.table(table(can_freq, gisd_k),2)]
+
 
 
 ## 2.4) define COVARIATES - CANNABIS
@@ -283,8 +297,9 @@ data[, castrisk := CAST_score_full >= 7]
 ##  HEALTH
 data[, table(HEALTH.01, HEALTH.02)]
 data[, prop.table(table(HEALTH.01, HEALTH.02),1)]
-data[, health_good := HEALTH.01 >= 2]
+data[, health_good := HEALTH.01 <= 2]
 data[, health_chronic := HEALTH.02 == 1]
+data[, prop.table(table(health_good, health_chronic),1)]
 
 ##  DISTRESS
 data[, table(DISTRESS_total)]
@@ -296,7 +311,7 @@ data$DISTRESS_total <- NULL
 
 ##  sample for regressions:
 data[,regsample := can30d == T & complete.cases(quant_pd_group)]
-data[, table(regsample)]
+data[, table(regsample)] # 723
 
 ##  AUDIT-C???
 
