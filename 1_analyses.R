@@ -157,26 +157,26 @@ data[, table(can30d)] # 1073
 ## 2.2) Frequency of Sources
 #-------------------------------------------------------
 
-data[can12m == T, wtd.mean(source_illegal, weights)] # 38.1%
-data[can12m == T, wtd.mean(source_social, weights)] # 34.9%
-data[can12m == T, wtd.mean(source_homegrow, weights)] # 39.4%
+data[can12m == T, wtd.mean(source_homegrow, weights)] # 39.7%
+data[can12m == T, wtd.mean(source_illegal, weights)] # 38.4%
+data[can12m == T, wtd.mean(source_social, weights)] # 34.5%
 data[can12m == T, wtd.mean(source_pharma, weights)] # 17.8%
-data[can12m == T, wtd.mean(source_other, weights)] # 12.5%
+data[can12m == T, wtd.mean(source_other, weights)] # 11.9%
 
 table(rowSums(data[can12m == T, .(source_illegal, source_social, 
                             source_homegrow, source_pharma, source_other)]))
-# (378+92+4)/1490 = 31.8%
+# (378+92+4)/1478 = 32.1%
 
-data[can12m == T, wtd.mean(source_homegrow == T | source_pharma == T, weights)] # 50.4%
+data[can12m == T, wtd.mean(source_homegrow == T | source_pharma == T, weights)] # 50.7%
 
 
 # STRICTLY LEGAL
 data[can12m == T, mean(only_homegrow == T)]
-data[can12m == T, wtd.mean(only_homegrow == T, weights)]
+data[can12m == T, wtd.mean(only_homegrow == T, weights)] # 7.4%
 data[can12m == T, mean(only_medical == T)]
-data[can12m == T, wtd.mean(only_medical == T, weights)]
+data[can12m == T, wtd.mean(only_medical == T, weights)] # 7.2%
 data[can12m == T, mean(only_homegrow_or_medical == T)]
-data[can12m == T, wtd.mean(only_homegrow_or_medical == T, weights)]
+data[can12m == T, wtd.mean(only_homegrow_or_medical == T, weights)] # 1.3%
 
 # subsample
 data[regsample == T, wtd.mean(source_illegal, weights)] # 41.7%
@@ -203,11 +203,9 @@ am6 <- poLCA(f, data = data, nclass = 6, maxiter = 100000, nrep = 50)
 am7 <- poLCA(f, data = data, nclass = 7, maxiter = 100000, nrep = 50)
 am8 <- poLCA(f, data = data, nclass = 8, maxiter = 100000, nrep = 50)
 
-run <- T
 
-if(run == T){
-
-  sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
+##  get model fit indices (Supp Table 1)
+sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
                       LL = c(am2$llik, am3$llik, am4$llik, am5$llik, am6$llik, am7$llik, am8$llik),
                       AIC = c(am2$aic, am3$aic, am4$aic, am5$aic, am6$aic, am7$aic, am8$aic),
                       BIC = c(am2$bic, am3$bic, am4$bic, am5$bic, am6$bic, am7$bic, am8$bic), 
@@ -232,36 +230,30 @@ if(run == T){
                                        calculate_lca_metrics(am6, 6, return_alcpp = F),
                                        calculate_lca_metrics(am7, 7, return_alcpp = F),
                                        calculate_lca_metrics(am8, 8, return_alcpp = F)))
-  sumtab %>% knitr::kable()
-  kable(sumtab) %>%
-    kable_styling() %>%
-    save_kable(file = "tabs/sup_tab1.html")
+sumtab %>% knitr::kable()
+kable(sumtab) %>%
+  kable_styling() %>%
+  save_kable(file = "tabs/sup_tab1.html")
+
+
+##  save plots for all candidate models
+for (m in 2:8){
   
-  for (m in 2:8){
-    
-    mod <- get(ls()[ls() %like% paste0("^am",m)])
-    png(filename = paste0("figures/LCA_mod_",m,"_classes_",DATE,".png"),
-        width = 12, height = 6, unit = "in", res = 300)
-    plot(mod)  
-    dev.off()
-    
-  }
-  }
-
-
-
+  mod <- get(ls()[ls() %like% paste0("^am",m)])
+  png(filename = paste0("figures/Supp Fig",m-1,"_LCA_mod_",m,"_classes_",DATE,".png"),
+      width = 12, height = 6, unit = "in", res = 300)
+  plot(mod)  
+  dev.off()
+}
+ 
+  
+##  add class findings to data
 lcamod_all <- am6
 
 ##  add classes
 #data$class <- NULL
 data$class <- NA_character_
 data[can12m == T]$class <- lcamod_all$predclass
-
-#"NO-POSESS",
-#"ILLEGAL",
-#"HOMEGROW",
-#"SOCIAL",
-#"MEDICAL"
 
 data$class <- factor(data$class, levels = 1:6, 
                      labels = c(
@@ -350,11 +342,12 @@ kable(regout[order(class,variable),.(class,variable,riskratio,ci,p)]) %>%
 ## 2.5) Cannabis sourcing and use quantities
 #-------------------------------------------------------
 
-data[regsample == T, prop.table(table(class))]
+# distribution of classes in subsample
+#data[regsample == T, prop.table(table(class))]
 data[regsample == T, .(weighted_sum = sum(weights)), by = class][
   , .(class,weighted_prop = weighted_sum / sum(weighted_sum))][order(class)]
 
-# mean/median
+# mean/median quantity
 data[regsample == T, .(mean = wtd.mean(quant_tot, weights), median = median(quant_tot)), by = class][order(mean)]
 
 ggplot(data[regsample == T], aes(x = quant_tot)) + 
@@ -514,12 +507,12 @@ ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
     panel.grid.minor.y = element_blank()) +
   guides(color = guide_legend(nrow = 2), linetype = guide_legend(nrow = 1)) +
   scale_x_discrete("") +
-  scale_color_manual("classes (population share)", values = color_6) +
+  scale_color_manual("classes (weighted population share)", values = color_6) +
   #scale_linetype_manual(values = linetype_values, labels = label_values) +
   scale_y_continuous("% Response probability\nwithin each class", 
                      breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
 
-ggsave(paste0("figures/LCA_probabilities_",DATE,".png"), height = 6, width = 12)
+ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".png"), height = 6, width = 12)
 
 rm(pdat, c, lab, levelorder)
 
@@ -527,7 +520,7 @@ rm(pdat, c, lab, levelorder)
 #-------------------------------------------------------
 
 pdat <- regout[variable != "(Intercept)",.(class,variable,riskratio,lower = `2.5 %`,upper = `97.5 %`)]
-pdat$class <- factor(pdat$class, levels = levels(data$class))
+pdat$class <- factor(pdat$class, levels = rev(levels(data$class)))
 
 pdat$variable <- factor(pdat$variable, levels = rev(levels(pdat$variable)))
 
@@ -536,19 +529,20 @@ pdat[, group := ifelse(variable %like% "sex|agegr|edu|gisd|DEGURBA", "sociodemog
 pdat$group <- factor(pdat$group, levels = c("sociodemographics","cannabis-related", "health-related"))
 
 ggplot(pdat, aes(x = variable, y = riskratio, color = class)) + 
-  facet_grid(group ~ ., scales = "free") +
+  facet_grid(group ~ ., scales = "free", space = "free") +
   geom_hline(yintercept = 1) +
   geom_point(position = position_dodge(0.7), size = 2) +
   geom_errorbar(aes(ymin = lower, ymax = upper), 
                 width = 0, position = position_dodge(0.7), linewidth = 0.4) +
   scale_x_discrete("") +
-  scale_y_continuous(transform = "log10") +
-  scale_color_manual("", values = color_6[2:6],
+  scale_y_continuous("Risk Ratio", transform = "log10") +
+  scale_color_manual("", values = rev(color_6[2:6]),
                      guide = guide_legend(reverse = TRUE)) +
   coord_flip() 
   
-ggsave(paste0("figures/Forest plot_",DATE,".png"), height = 8, width = 10)
+ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
 
+rm(pdat)
 
 
 ## 3.3) Jitter
@@ -558,12 +552,12 @@ pdat <- data[regsample == T, .(class, quant_tot, weights)]
 pdat[, weight := sum(weights), by = class]
 
 ggplot(pdat, aes(x = class, y = quant_tot, fill = class)) + 
-  geom_jitter(alpha = 0.3, show.legend = F) + 
-  #geom_boxplot(alpha = 0.8, show.legend = F) + 
-  geom_violin(alpha = 0.8, show.legend = F) + 
+  geom_boxplot(alpha = 0.8, show.legend = F) + 
+  geom_jitter(alpha = 0.3, show.legend = F, width = 0.2) + 
+  #geom_violin(alpha = 0.8, show.legend = F) + 
   scale_x_discrete("") + 
-  scale_y_continuous("30-day cannabis use quanties\n(logarithmized)", trans = "log10") + 
-  scale_fill_manual(values = color_7)
+  scale_y_continuous("30-day cannabis use quanties\n(logarithmized scale)", trans = "log10") + 
+  scale_fill_manual(values = color_6)
 
-ggsave(paste0("figures/QUANT JITTER_",DATE,".png"), height = 5, width = 8)
+ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".png"), height = 5, width = 8)
 

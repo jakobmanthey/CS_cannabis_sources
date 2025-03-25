@@ -45,7 +45,7 @@ options(scipen = 999)
 ##  Germany WAVE 2
 # -------------------------------------------------------
 
-path <- file.path("data", "20250320","full_GER_wave2_cleaned_20250320.rds")
+path <- file.path("data", "20250321","full_GER_wave2_cleaned_20250321.rds")
 input <- data.table(readRDS(file = path))
 
 nrow(input) # 11578
