@@ -18,7 +18,8 @@ rm(list=ls())
 
 packages <- c("data.table", "ggplot2", "ggthemes",
               "Hmisc", "tidyr", "nnet",
-              "tableone", "knitr", "kableExtra")
+              "tableone", "knitr", "kableExtra",
+              "survey")
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
@@ -159,13 +160,15 @@ data$s_socialmedia <- as.numeric(data$SOURCE.8)
 data$s_no_possess <- as.numeric(data$SOURCE.9)
 data$s_other <- as.numeric(data$SOURCE.11.open %like% "[a-zA-Z]")+1
 
-##  ONLY homegrow and no other source
+##  STRICT LEGAL DEFINITION: ONLY homegrow / club / pharmacy and no other source
 data$temp <- rowSums(data[,.SD, .SDcols = names(data)[names(data) %like% "^s_"]])
 data[, only_homegrow := ifelse(s_homegrown_self == 2 & temp == 12, T, F)]
+data[, only_cannabisclub := ifelse(s_cannabisclub == 2 & temp == 12, T, F)]
 data[, only_medical := ifelse(s_pharmacy == 2 & temp == 12, T, F)]
-data[, only_homegrow_or_medical := ifelse(s_homegrown_self == 2 & s_pharmacy == 2 & temp == 13, T, F)]
+#data[, only_homegrow_or_medical := ifelse(s_homegrown_self == 2 & s_pharmacy == 2 & temp == 13, T, F)]
 data[, table(only_homegrow,only_medical)]
-data[, table(only_homegrow,only_homegrow_or_medical)]
+data[, table(only_homegrow,only_cannabisclub)]
+#data[, table(only_homegrow,only_homegrow_or_medical)]
 
 
 ## 2.3) define COVARIATES - SOCIODEMOGRAPHICS
@@ -273,6 +276,7 @@ summary(data$spend_monthly)
 
 ##  AGE ONSET
 data$age_firstuse
+summary(data$age_firstuse)
 data[, earlyonset := age_firstuse <=16]
 data[, table(age_firstuse,earlyonset)]
 

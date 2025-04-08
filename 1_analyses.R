@@ -29,8 +29,6 @@
 
 source("0_prepare.R")
 
-input[, min(START)]
-input[, max(END)]
 
 
 ##  some helper functions
@@ -148,42 +146,51 @@ calculate_classification_metrics <- function(model, num_classes, lowest) {
 ## 2) RESULTS
 # ______________________________________________________________________________________________________________________
 
+## 2.0) Methods
+#-------------------------------------------------------
+
+input[, min(START)]
+input[, max(END)]
+data[,summary(weights)]
+
 ## 2.1) Descriptives general
 #-------------------------------------------------------
 
 data[, table(can12m)] # 1478
 data[, table(can30d)] # 1073
 
-## 2.2) Frequency of Sources
+data[, wtd.mean(can12m, weights)]
+data[, wtd.mean(can30d, weights)]
+
+## 2.2) A priori types of cannabis sourcing
 #-------------------------------------------------------
 
-data[can12m == T, wtd.mean(source_homegrow, weights)] # 39.7%
-data[can12m == T, wtd.mean(source_illegal, weights)] # 38.4%
-data[can12m == T, wtd.mean(source_social, weights)] # 34.5%
-data[can12m == T, wtd.mean(source_pharma, weights)] # 17.8%
-data[can12m == T, wtd.mean(source_other, weights)] # 11.9%
-
-table(rowSums(data[can12m == T, .(source_illegal, source_social, 
-                            source_homegrow, source_pharma, source_other)]))
+# more than 1 source type:
+data$source_atleast2 <- NA
+data[can12m == T]$source_atleast2 <- rowSums(data[can12m == T, .(source_illegal, source_social, 
+                                  source_homegrow, source_pharma, source_other)]) >1
 # (378+92+4)/1478 = 32.1%
+prop.table(xtabs(weights ~ source_atleast2, data = data)) # 35.0%
 
-data[can12m == T, wtd.mean(source_homegrow == T | source_pharma == T, weights)] # 50.7%
+# home cultivation more often in subsample?
+data[can12m == T, weights::wtd.chi.sq(var1 = source_homegrow,
+                                      var2 = regsample, weight = weights)]
 
 
-# STRICTLY LEGAL
-data[can12m == T, mean(only_homegrow == T)]
-data[can12m == T, wtd.mean(only_homegrow == T, weights)] # 7.4%
-data[can12m == T, mean(only_medical == T)]
-data[can12m == T, wtd.mean(only_medical == T, weights)] # 7.2%
-data[can12m == T, mean(only_homegrow_or_medical == T)]
-data[can12m == T, wtd.mean(only_homegrow_or_medical == T, weights)] # 1.3%
 
-# subsample
-data[regsample == T, wtd.mean(source_illegal, weights)] # 41.7%
-data[regsample == T, wtd.mean(source_social, weights)] # 35.2%
-data[regsample == T, wtd.mean(source_homegrow, weights)] # 49.1%
-data[regsample == T, wtd.mean(source_pharma, weights)] # 21.3%
-data[regsample == T, wtd.mean(source_other, weights)] # 5.3%
+# strictly legal
+data[can12m == T, .(sum(source_homegrow == T | source_pharma == T),
+                    mean(source_homegrow == T | source_pharma == T),
+                    wtd.mean(source_homegrow == T | source_pharma == T, weights))] # 50.7%
+data[can12m == T, .(sum(only_homegrow), 
+                    mean(only_homegrow == T),
+                    wtd.mean(only_homegrow == T, weights))]
+data[can12m == T, .(sum(only_cannabisclub),
+                    mean(only_cannabisclub == T),
+                    wtd.mean(only_cannabisclub == T, weights))]
+data[can12m == T, .(sum(only_medical), 
+                    mean(only_medical == T),
+                    wtd.mean(only_medical == T, weights))]
 
 
 ## 2.3) LCA
@@ -233,7 +240,7 @@ sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
 sumtab %>% knitr::kable()
 kable(sumtab) %>%
   kable_styling() %>%
-  save_kable(file = "tabs/sup_tab1.html")
+  save_kable(file = "tabs/sup_tab1_v4.html")
 
 
 ##  save plots for all candidate models
@@ -257,20 +264,20 @@ data[can12m == T]$class <- lcamod_all$predclass
 
 data$class <- factor(data$class, levels = 1:6, 
                      labels = c(
-                       "HOMEGROW",
+                       "HOME CULTIVATION",
                        "NO-POSESS",
                        "ILLEGAL",
                        "MIX",
                        "SOCIAL",
-                       "MEDICAL"))
+                       "PHARMACY"))
 
 data$class <- factor(data$class,
                      levels = c(
                        "MIX",
                        "SOCIAL",
                        "ILLEGAL",
-                       "HOMEGROW",
-                       "MEDICAL",
+                       "HOME CULTIVATION",
+                       "PHARMACY",
                        "NO-POSESS"))
 
 data[, prop.table(table(class))]
@@ -286,7 +293,7 @@ f <- as.formula(paste0("class ~ ", paste0(vars, collapse = " + ")))
 
 sub <- copy(data[can12m == T & sex != "other"])
 sub$sex <-factor(sub$sex)
-sub$edu <-relevel(sub$edu, ref = "mid")
+#sub$edu <-relevel(sub$edu, ref = "low")
 
 mnmod <- multinom(formula = f,data = sub)
 summary(mnmod)
@@ -316,27 +323,35 @@ p <- melt(p, id.vars = c("class"), value.name = "p")[order(class,variable)]
 regout <- merge(rs, ci, by = c("class","variable"))
 regout <- merge(regout, p, by = c("class","variable"))
 
-var_levels <- unique(regout$variable)
-var_levels <- c(var_levels[var_levels %like% "Intercept"],
-                var_levels[var_levels %like% "sex"],
-                var_levels[var_levels %like% "agegr"],
-                var_levels[var_levels %like% "edu"],
-                var_levels[var_levels %like% "gisd"],
-                var_levels[var_levels %like% "DEGURBA"],
-                var_levels[var_levels %like% "monthly"],
-                var_levels[var_levels %like% "weekly"],
-                var_levels[var_levels %like% "daily"],
-                var_levels[var_levels %like% "purpose"],
-                var_levels[var_levels %like% "prescr"],
-                var_levels[var_levels %like% "cast"],
-                var_levels[var_levels %like% "health"],
-                var_levels[var_levels %like% "distress"])
+##  var labels for Table and Figure
+regout[, varlab := dplyr::recode_factor(variable,
+                                       "(Intercept)" = "Intercept",
+                                       "sexmen" = "Sex: men",
+                                       "agegroup25-34" = "Age: 25-34",
+                                       "agegroup35-44" = "Age: 35-44",
+                                       "agegroup45-54" = "Age: 45-54",
+                                       "agegroup55-64" = "Age: 55-64",
+                                       "edumid" = "Education: mid",
+                                       "eduhigh" = "Education: high",
+                                       "gisd_kmid" = "Regional deprivation: mid",
+                                       "gisd_khigh" = "Regional deprivation: high",
+                                       "DEGURBArural" = "DEGURBA: rural",
+                                       "DEGURBAtowns_suburbs" = "DEGURBA: towns and suburbs",
+                                       "freq12m1+ monthly"  = "Use frequency: at least monthly",
+                                       "freq12m1+ weekly"  = "Use frequency: at least weekly",
+                                       "freq12m(near) daily"  = "Use frequency: (near) daily",
+                                       "purposemedical and non-medical" = "Use purpose: medical and non-medical",
+                                       "purposeonly medical" = "Use purpose: only medical",
+                                       "prescribedTRUE" = "Has prescription for medical cannabis",
+                                       "castriskTRUE" = "CAST: high CUD risk",
+                                       "distressTRUE" = "K6: high distress",
+                                       "health_goodTRUE" = "Self-reported good health",
+                                       "health_chronicTRUE" = "Self-reported chronic disease")]
+regout[, table(varlab, useNA = "always")]
 
-regout$variable <- factor(regout$variable, levels = var_levels)
-
-kable(regout[order(class,variable),.(class,variable,riskratio,ci,p)]) %>%
+kable(regout[order(class,varlab),.(class,varlab,riskratio,ci,p)]) %>%
   kable_styling() %>%
-  save_kable(file = "tabs/sup_tab2.html")
+  save_kable(file = "tabs/sup_tab2_v4.html")
 
 
 ## 2.5) Cannabis sourcing and use quantities
@@ -366,8 +381,8 @@ temp[, wt_tot := sum(quant_tot*weights)]
 temp[, wt_class := sum(quant_tot*weights), by = class]
 temp <- unique(temp[, .(class,prop = wt_class/wt_tot)])[order(prop)]
 
-#social+medical+homegrow:
-temp[class %like% "SOCIAL|MEDICAL|HOMEGROW", sum(prop)]
+#social+pharmacy+homegrow:
+temp[class %like% "SOCIAL|PHARMACY|HOME CULTIVATION", sum(prop)]
 
 # mean/median €
 data[regsample == T, .(mean = wtd.mean(spend_monthly, weights), median = median(spend_monthly)), by = class][order(mean)]
@@ -389,41 +404,101 @@ ggplot(data[regsample == T], aes(x = spend_monthly)) +
 ## 3.1) TABLE 1
 #-------------------------------------------------------
 
+
+###
+library(gtsummary)
+library(survey)
+library(dplyr)
+
+# Define variables and create survey design
 vars <- names(data)[names(data) %like% "sex|age|edu|gisd|DEGURBA|freq12m|freq30d|quant_pd|earlyonset|purpose|prescribed|castrisk|distress|health"]
+subtab <- data[can12m == T, .SD, .SDcols = c(vars, "weights", "regsample")]
+subtab_svy <- svydesign(ids = ~1, weights = ~weights, data = subtab)
 
-table1a <- CreateTableOne(data = data[can12m == T,.SD, .SDcols = vars])
-table1a_df <- as.data.frame(print(table1a))
-#table1a_df <- as.data.table(print(table1a))
+# Custom test functions for survey data
+custom_ttest <- function(data, variable, by, ...) {
+  svyttest(as.formula(paste(variable, "~", by)), design = data) %>% 
+    broom::tidy()
+}
 
-table1b <- CreateTableOne(data = data[regsample == T,.SD, .SDcols = vars])
-table1b_df <- as.data.frame(print(table1b))
-#table1b_df <- as.data.table(print(table1b))
+custom_chisq <- function(data, variable, by, ...) {
+  svychisq(as.formula(paste("~", variable, "+", by)), design = data) %>% 
+    broom::tidy()
+}
 
-out <- cbind(table1a_df, table1b_df)
+# Total sample table
+table1a <- tbl_svysummary(
+  subtab_svy,
+  include = vars,
+  statistic = list(
+    all_continuous() ~ "{mean} ({sd})",
+    all_categorical() ~ "{n_unweighted} ({p}%)"
+  ),
+  digits = list(all_continuous() ~ 2, all_categorical() ~ c(0, 1))
+)
 
-kable(out) %>%
-  kable_styling() %>%
-  save_kable(file = "tabs/tab1.html")
+# Subgroup table with custom tests
+table1b <- tbl_svysummary(
+  subtab_svy,
+  by = regsample,
+  include = vars,
+  statistic = list(
+    all_continuous() ~ "{mean} ({sd})",
+    all_categorical() ~ "{n_unweighted} ({p}%)"
+  ),
+  digits = list(all_continuous() ~ 2, all_categorical() ~ c(0, 1))
+) %>%
+  add_p(
+    test = list(
+      all_continuous() ~ "custom_ttest",
+      all_categorical() ~ "custom_chisq"
+    ),
+    pvalue_fun = ~ style_pvalue(., digits = 3)
+  )
 
-## BIAS OF REGRESSION SAMPLE (TABLE 1)
+# Merge and export
+combined_table <- tbl_merge(
+  tbls = list(table1a, table1b),
+  tab_spanner = c("**Overall**", "**By Subgroup**")
+)
 
-### comparison:
-summary(glm(age ~ regsample,family = "gaussian", data[can12m == T])) # no diff
-summary(glm(sex == "men" ~ regsample,family = "binomial", data[can12m == T])) # more men
-summary(glm(edu == "mid" ~ regsample,family = "binomial", data[can12m == T])) # more mid edu
-summary(glm(edu == "high" ~ regsample,family = "binomial", data[can12m == T])) # more high edu
-summary(glm(gisd_k == "high" ~ regsample,family = "binomial", data[can12m == T])) # no diff
-summary(glm(gisd_k == "mid" ~ regsample,family = "binomial", data[can12m == T])) # no diff
-summary(glm(DEGURBA == "cities" ~ regsample,family = "binomial", data[can12m == T])) # no diff
-summary(glm(DEGURBA == "towns_suburbs" ~ regsample,family = "binomial", data[can12m == T])) # no diff
-summary(glm(freq30d ~ regsample,family = "gaussian", data[can12m == T])) # more use days
-summary(glm(earlyonset ~ regsample,family = "binomial", data[can12m == T])) # earlier onset
-summary(glm(purpose == "only medical" ~ regsample,family = "binomial", data[can12m == T])) # less only medical 
-summary(glm(prescribed ~ regsample,family = "binomial", data[can12m == T])) # more prescription
-summary(glm(castrisk ~ regsample,family = "binomial", data[can12m == T])) # more castrisk
-summary(glm(distress ~ regsample,family = "binomial", data[can12m == T])) # no diff
-summary(glm(health_good ~ regsample,family = "binomial", data[can12m == T])) # no diff
-summary(glm(health_chronic ~ regsample,family = "binomial", data[can12m == T])) # no diff
+combined_table %>%
+  as_kable_extra() %>%
+  kableExtra::kable_styling(
+    full_width = FALSE,
+    font_size = 16,
+    html_font = "Arial"
+  ) %>%
+  kableExtra::save_kable(file = "tabs/tab1_v4.html")
+
+
+############
+
+
+
+
+## 3.2) TABLE 2
+#-------------------------------------------------------
+
+# total sample
+data[can12m == T, .(sum(source_homegrow),wtd.mean(source_homegrow, weights))] # 39.7%
+data[can12m == T, .(sum(source_illegal), wtd.mean(source_illegal, weights))] # 38.4%
+data[can12m == T, .(sum(source_social), wtd.mean(source_social, weights))] # 34.5%
+data[can12m == T, .(sum(source_pharma), wtd.mean(source_pharma, weights))] # 17.8%
+data[can12m == T, .(sum(source_other), wtd.mean(source_other, weights))] # 11.9%
+
+# subsample
+data[regsample == T, .(sum(source_homegrow),wtd.mean(source_homegrow, weights))] # 39.7%
+data[regsample == T, .(sum(source_illegal), wtd.mean(source_illegal, weights))] # 38.4%
+data[regsample == T, .(sum(source_social), wtd.mean(source_social, weights))] # 34.5%
+data[regsample == T, .(sum(source_pharma), wtd.mean(source_pharma, weights))] # 17.8%
+data[regsample == T, .(sum(source_other), wtd.mean(source_other, weights))] # 11.9%
+
+# STRICTLY LEGAL
+data[can12m == T, .(sum(only_homegrow == T | only_cannabisclub == T | only_medical == T),
+                    wtd.mean(only_homegrow == T | only_cannabisclub == T | only_medical == T, weights))] # 16.7%
+data[regsample == T, .(sum(only_homegrow == T | only_cannabisclub == T | only_medical == T),
+                    wtd.mean(only_homegrow == T | only_cannabisclub == T | only_medical == T, weights))] # 18.6%
 
 
 
@@ -443,7 +518,7 @@ color_6 <- c("#4e0a39", "#c2154a", "#eb8102", "#f8cb00", "#929d0e", "#007c5f")
 color_7 <- c("#4e0a39", "#c2154a", "#eb8102", "#f8cb00", "#929d0e", "#007c5f", "#004b7d")
 
 
-## 3.1) LCA plot
+## 4.1) LCA plot
 #-------------------------------------------------------
 
 # prepare data
@@ -463,12 +538,12 @@ pdat$source <- factor(pdat$source, c("knowndealer","unknowns","online","socialme
 
 pdat$class <- factor(pdat$class, levels = 1:6, 
                      labels = c(
-                       "HOMEGROW",
+                       "HOME CULTIVATION",
                        "NO-POSESS",
                        "ILLEGAL",
                        "MIX",
                        "SOCIAL",
-                       "MEDICAL"))
+                       "PHARMACY"))
 
 #class_p <- lcamod_all$P
 pdat$class_lab <- NA_character_
@@ -516,19 +591,19 @@ ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".png"), height = 6, width 
 
 rm(pdat, c, lab, levelorder)
 
-## 3.2) Forest plot
+## 4.2) Forest plot
 #-------------------------------------------------------
 
-pdat <- regout[variable != "(Intercept)",.(class,variable,riskratio,lower = `2.5 %`,upper = `97.5 %`)]
+pdat <- regout[variable != "(Intercept)",.(class,varlab,riskratio,lower = `2.5 %`,upper = `97.5 %`)]
 pdat$class <- factor(pdat$class, levels = rev(levels(data$class)))
 
-pdat$variable <- factor(pdat$variable, levels = rev(levels(pdat$variable)))
+pdat$varlab <- factor(pdat$varlab, levels = rev(levels(pdat$varlab)))
 
-pdat[, group := ifelse(variable %like% "sex|agegr|edu|gisd|DEGURBA", "sociodemographics",
-                       ifelse(variable %like% "freq|purpose|prescribed|castrisk", "cannabis-related", "health-related"))]
+pdat[, group := ifelse(varlab %like% "Sex|Age|Edu|depri|DEGURBA", "sociodemographics",
+                       ifelse(varlab %like% "frequenc|purpose|prescription|CAST", "cannabis-related", "health-related"))]
 pdat$group <- factor(pdat$group, levels = c("sociodemographics","cannabis-related", "health-related"))
 
-ggplot(pdat, aes(x = variable, y = riskratio, color = class)) + 
+ggplot(pdat, aes(x = varlab, y = riskratio, color = class)) + 
   facet_grid(group ~ ., scales = "free", space = "free") +
   geom_hline(yintercept = 1) +
   geom_point(position = position_dodge(0.7), size = 2) +
@@ -545,7 +620,7 @@ ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
 rm(pdat)
 
 
-## 3.3) Jitter
+## 4.3) Jitter
 #-------------------------------------------------------
 
 pdat <- data[regsample == T, .(class, quant_tot, weights)]
@@ -559,5 +634,22 @@ ggplot(pdat, aes(x = class, y = quant_tot, fill = class)) +
   scale_y_continuous("30-day cannabis use quanties\n(logarithmized scale)", trans = "log10") + 
   scale_fill_manual(values = color_6)
 
-ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".png"), height = 5, width = 8)
+ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".png"), height = 5, width = 10)
 
+
+# ==================================================================================================================================================================
+# ==================================================================================================================================================================
+# ==================================================================================================================================================================
+
+## 5) SUPPLEMENTAL FIGURES
+# ______________________________________________________________________________________________________________________
+
+## 5.1) weights
+#-------------------------------------------------------
+
+ggplot(data[!is.na(edu)], aes(x = sex, y = weights)) +
+  facet_grid(edu ~ agegroup) + 
+  geom_hline(yintercept = 1) +
+  geom_jitter(alpha = 0.1, show.legend = F, width = 0.2)
+
+ggsave(paste0("figures/Supp Fig1_WEIGHTS_",DATE,".png"), height = 5, width = 10)
