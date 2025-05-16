@@ -15,8 +15,6 @@
 
 
 
-
-
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
@@ -162,6 +160,11 @@ data[, table(can30d)] # 1073
 data[, wtd.mean(can12m, weights)]
 data[, wtd.mean(can30d, weights)]
 
+svy <- svydesign(ids = ~ID, weights = ~weights, data = data)
+svyciprop(~can12m, svy)
+svyciprop(~can30d, svy)
+
+
 ## 2.2) A priori types of cannabis sourcing
 #-------------------------------------------------------
 
@@ -171,6 +174,8 @@ data[can12m == T]$source_atleast2 <- rowSums(data[can12m == T, .(source_illegal,
                                   source_homegrow, source_pharma, source_other)]) >1
 # (378+92+4)/1478 = 32.1%
 prop.table(xtabs(weights ~ source_atleast2, data = data)) # 35.0%
+svy <- svydesign(ids = ~ID, weights = ~weights, data = data)
+svyciprop(~source_atleast2, svy) # ci
 
 # home cultivation more often in subsample?
 data[can12m == T, weights::wtd.chi.sq(var1 = source_homegrow,
@@ -293,12 +298,9 @@ f <- as.formula(paste0("class ~ ", paste0(vars, collapse = " + ")))
 
 sub <- copy(data[can12m == T & sex != "other"])
 sub$sex <-factor(sub$sex)
-#sub$edu <-relevel(sub$edu, ref = "low")
 
 mnmod <- multinom(formula = f,data = sub)
 summary(mnmod)
-
-#tab2 <- gtsummary::tbl_regression(mnmod, exponentiate = TRUE)
 
 set.seed(924)
     
@@ -357,8 +359,11 @@ kable(regout[order(class,varlab),.(class,varlab,riskratio,ci,p)]) %>%
 ## 2.5) Cannabis sourcing and use quantities
 #-------------------------------------------------------
 
+# total quantities
+data[regsample == T, sum(quant_tot)] # 11724
+data[regsample == T, sum(quant_tot*weights)] # 14033
+
 # distribution of classes in subsample
-#data[regsample == T, prop.table(table(class))]
 data[regsample == T, .(weighted_sum = sum(weights)), by = class][
   , .(class,weighted_prop = weighted_sum / sum(weighted_sum))][order(class)]
 
@@ -568,7 +573,6 @@ pdat$class_lab <- factor(pdat$class_lab,
 ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
   geom_point() +
   geom_line(linewidth=1) +
-  #theme_minimal() +
   theme(
     axis.text.x = element_text(hjust = 0.5, vjust = 0.5, angle = 45),
     axis.text.y = element_text(size = 12),              
@@ -583,13 +587,13 @@ ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
   guides(color = guide_legend(nrow = 2), linetype = guide_legend(nrow = 1)) +
   scale_x_discrete("") +
   scale_color_manual("classes (weighted population share)", values = color_6) +
-  #scale_linetype_manual(values = linetype_values, labels = label_values) +
   scale_y_continuous("% Response probability\nwithin each class", 
                      breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
 
 ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".png"), height = 6, width = 12)
+ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".pdf"), height = 6, width = 12)
 
-rm(pdat, c, lab, levelorder)
+rm(pdat, c, levelorder)
 
 ## 4.2) Forest plot
 #-------------------------------------------------------
@@ -616,6 +620,7 @@ ggplot(pdat, aes(x = varlab, y = riskratio, color = class)) +
   coord_flip() 
   
 ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
+ggsave(paste0("figures/Fig2_Forest plot_",DATE,".pdf"), height = 8, width = 10)
 
 rm(pdat)
 
@@ -629,13 +634,14 @@ pdat[, weight := sum(weights), by = class]
 ggplot(pdat, aes(x = class, y = quant_tot, fill = class)) + 
   geom_boxplot(alpha = 0.8, show.legend = F) + 
   geom_jitter(alpha = 0.3, show.legend = F, width = 0.2) + 
-  #geom_violin(alpha = 0.8, show.legend = F) + 
   scale_x_discrete("") + 
   scale_y_continuous("30-day cannabis use quanties\n(logarithmized scale)", trans = "log10") + 
   scale_fill_manual(values = color_6)
 
 ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".png"), height = 5, width = 10)
+ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".pdf"), height = 5, width = 10)
 
+rm(pdat)
 
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
