@@ -13,6 +13,28 @@
 # 0) ESSENTIALS
 # ______________________________________________________________________________________________________________________
 
+# clean workspace
+rm(list=ls())
+
+packages <- c("data.table", "ggplot2", "ggthemes",
+              "Hmisc", "tidyr", "nnet",
+              "tableone", "knitr", "kableExtra",
+              "survey", "gtsummary", "survey", "dplyr")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages])
+}
+# Load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+# current date:
+DATE <- format(Sys.Date(), "%y%m%d")
+
+# themes and options
+theme_set( theme_gdocs() )
+options(scipen = 999)
 
 
 # ==================================================================================================================================================================
@@ -22,120 +44,29 @@
 # 1) PREPARE DATA
 # ______________________________________________________________________________________________________________________
 
-##  run source code
+##  get data (after running LCA)
 # -------------------------------------------------------
 
-source("0_prepare.R")
+#source("1_LCA.R")
 
+data <- readRDS(paste0("data/data_sources_prepared_after LCA_",DATE,".rds"))
+lcamod <- readRDS(paste0("data/LCA model_",DATE,".rds"))
 
-
-##  some helper functions
+##  helper functions
 # -------------------------------------------------------
 
-##  entropy from stack overflow or this ppt: // https://daob.nl/wp-content/uploads/2015/07/ESRA-course-slides.pdf
-get_entropy<-function(mod){
-  entropy<-function(p)sum(-p*log(p),na.rm = T)
-  error_prior <- entropy(mod$P) # Class proportions
-  error_post <- mean(apply(mod$posterior, 1, entropy))
-  R2_entropy <- (error_prior - error_post) / error_prior
-  return(R2_entropy)
+# Custom test functions for survey data
+custom_ttest <- function(data, variable, by, ...) {
+  svyttest(as.formula(paste(variable, "~", by)), design = data) %>% 
+    broom::tidy()
+}
+
+custom_chisq <- function(data, variable, by, ...) {
+  svychisq(as.formula(paste("~", variable, "+", by)), design = data) %>% 
+    broom::tidy()
 }
 
 
-calculate_lca_metrics <- function(model, num_classes, return_alcpp = TRUE) {
-  # Extract posterior probabilities and predicted classes
-  posteriors <- as.data.table(model$posterior)
-  posteriors[, predclass := model$predclass]
-  
-  # Ensure correct column order
-  class_cols <- paste0("class", 1:num_classes)
-  names(posteriors) <- c(class_cols, "predclass")
-  setcolorder(posteriors, c(class_cols, "predclass"))
-  
-  # Calculate the classification table
-  classification_table <- posteriors[, lapply(.SD, sum), 
-                                     by = predclass, 
-                                     .SDcols = class_cols]
-  setorder(classification_table, predclass)
-  
-  # Calculate ALCPP
-  alcpp_matrix <- matrix(0, nrow = num_classes, ncol = num_classes)
-  for (i in 1:num_classes) {
-    class_members <- posteriors[predclass == i]
-    alcpp_matrix[i,] <- colMeans(class_members[, ..class_cols])
-  }
-  
-  # Calculate lowest ALCPP diagonal value
-  lowest_alcpp <- min(diag(alcpp_matrix))
-  
-  # Return based on user choice
-  if (return_alcpp) {
-    return(alcpp_matrix)  # Return full ALCPP matrix
-  } else {
-    return(lowest_alcpp)  # Return lowest diagonal value of ALCPP
-  }
-}
-
-
-
-
-##########
-
-## Average posterior class membership probabilities
-calculate_classification_metrics <- function(model, num_classes, lowest) {
-  # Extract the posterior probabilities
-  class_probs <- data.frame(model$posterior)
-  
-  # Calculate the maximum probability for each participant
-  class_probs$max_prob <- apply(class_probs, 1, max)
-  
-  # Calculate average posterior probability
-  avg_posterior_prob <- mean(class_probs$max_prob)
-  cat("Average posterior probability: ", avg_posterior_prob, "\n")
-  
-  # Create a dataframe with posterior probabilities and predicted classes
-  posteriors <- data.table(model$posterior, model$predclass)
-  
-  # Rename the predclass column
-  names(posteriors)[num_classes +1] <- "predclass"
-  
-  # Calculate the classification table by summing the probabilities
-  classification_table <- posteriors[, lapply(.SD, function(x) {round(sum(x),3)}), by = predclass, .SDcols = names(posteriors)[names(posteriors) != "predclass"]][order(predclass)]
-  
-  # Transform the counts to proportions
-  classification_table_prop <- copy(classification_table)
-  select <- names(classification_table)[names(classification_table) != "predclass"]
-  classification_table_prop[, (select) := lapply(.SD, function(x) x/sum(x)), .SDcols = select]
-  rm(select)
-  
-  # Print the proportions table
-  print(classification_table_prop)
-  
-  # Convert to matrix and calculate classification error
-  classification_values_only <- as.matrix(classification_table[,2:(num_classes + 1)])
-  total_classification_error <- 1 - sum(diag(classification_values_only)) / sum(classification_values_only)
-  
-  cat("Total classification error: ", total_classification_error, "\n")
-  
-  # REPORT
-  if (lowest == T){
-    # report lowest:
-    
-    select <- names(classification_table_prop)[names(classification_table_prop) != "predclass"]
-    temp <- copy(classification_table_prop[,.SD,.SDcols = select])
-    return(min(diag(as.matrix(temp))))
-    
-  } else {
-    
-    # report results as a list for potential further use
-    return(list(avg_posterior_prob = avg_posterior_prob,
-                classification_table = classification_table,
-                classification_table_prop = classification_table_prop,
-                total_classification_error = total_classification_error))
-  }
-}
-  
-  
 
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
@@ -147,8 +78,8 @@ calculate_classification_metrics <- function(model, num_classes, lowest) {
 ## 2.0) Methods
 #-------------------------------------------------------
 
-input[, min(START)]
-input[, max(END)]
+#input[, min(START)]
+#input[, max(END)]
 data[,summary(weights)]
 
 ## 2.1) Descriptives general
@@ -171,7 +102,7 @@ svyciprop(~can30d, svy)
 # more than 1 source type:
 data$source_atleast2 <- NA
 data[can12m == T]$source_atleast2 <- rowSums(data[can12m == T, .(source_illegal, source_social, 
-                                  source_homegrow, source_pharma, source_other)]) >1
+                                                                 source_homegrow, source_pharma, source_other)]) >1
 # (378+92+4)/1478 = 32.1%
 prop.table(xtabs(weights ~ source_atleast2, data = data)) # 35.0%
 svy <- svydesign(ids = ~ID, weights = ~weights, data = data)
@@ -197,100 +128,14 @@ data[can12m == T, .(sum(only_medical),
                     mean(only_medical == T),
                     wtd.mean(only_medical == T, weights))]
 
-
-## 2.3) LCA
-#-------------------------------------------------------
-
-library(poLCA)
-
-f <- as.formula(paste0("cbind(",paste(
-  c("s_pharmacy", "s_friends", "s_unknowns", "s_knowndealer", "s_homegrown_self", "s_homegrown_others", "s_cannabisclub",
-    "s_online", "s_socialmedia", "s_no_possess", "s_other"), collapse = ","), ")~1" ))
-set.seed(341)
-am2 <- poLCA(f, data = data, nclass = 2, maxiter = 100000, nrep = 50)
-am3 <- poLCA(f, data = data, nclass = 3, maxiter = 100000, nrep = 50)
-am4 <- poLCA(f, data = data, nclass = 4, maxiter = 100000, nrep = 50)
-am5 <- poLCA(f, data = data, nclass = 5, maxiter = 100000, nrep = 50)
-am6 <- poLCA(f, data = data, nclass = 6, maxiter = 100000, nrep = 50)
-am7 <- poLCA(f, data = data, nclass = 7, maxiter = 100000, nrep = 50)
-am8 <- poLCA(f, data = data, nclass = 8, maxiter = 100000, nrep = 50)
+##  Cannabis sourcing by medical/recreational use purpose
+data[, .(.N, mean = wtd.mean(source_pharma, weights)), by = purpose][order(purpose)]
+data[, weights::wtd.chi.sq(var1 = source_pharma,
+                           var2 = purpose, weight = weights)]
 
 
-##  get model fit indices (Supp Table 1)
-sumtab = data.frame(Models = stringr::str_c(c(2,3,4,5,6,7,8), " Class"),
-                      LL = c(am2$llik, am3$llik, am4$llik, am5$llik, am6$llik, am7$llik, am8$llik),
-                      AIC = c(am2$aic, am3$aic, am4$aic, am5$aic, am6$aic, am7$aic, am8$aic),
-                      BIC = c(am2$bic, am3$bic, am4$bic, am5$bic, am6$bic, am7$bic, am8$bic), 
-                      Entropy = c(get_entropy(am2), 
-                                  get_entropy(am3),
-                                  get_entropy(am4),
-                                  get_entropy(am5),
-                                  get_entropy(am6),
-                                  get_entropy(am7),
-                                  get_entropy(am8)),
-                      smallest_n = c(min(table(am2$predclass)),
-                                     min(table(am3$predclass)),
-                                     min(table(am4$predclass)),
-                                     min(table(am5$predclass)),
-                                     min(table(am6$predclass)),
-                                     min(table(am7$predclass)),
-                                     min(table(am8$predclass))),
-                      ALCPP_lowest = c(calculate_lca_metrics(am2, 2, return_alcpp = F),
-                                       calculate_lca_metrics(am3, 3, return_alcpp = F),
-                                       calculate_lca_metrics(am4, 4, return_alcpp = F),
-                                       calculate_lca_metrics(am5, 5, return_alcpp = F),
-                                       calculate_lca_metrics(am6, 6, return_alcpp = F),
-                                       calculate_lca_metrics(am7, 7, return_alcpp = F),
-                                       calculate_lca_metrics(am8, 8, return_alcpp = F)))
-sumtab %>% knitr::kable()
-kable(sumtab) %>%
-  kable_styling() %>%
-  save_kable(file = "tabs/sup_tab1_v4.html")
 
-
-##  save plots for all candidate models
-for (m in 2:8){
-  
-  mod <- get(ls()[ls() %like% paste0("^am",m)])
-  png(filename = paste0("figures/Supp Fig",m-1,"_LCA_mod_",m,"_classes_",DATE,".png"),
-      width = 12, height = 6, unit = "in", res = 300)
-  plot(mod)  
-  dev.off()
-}
- 
-  
-##  add class findings to data
-lcamod_all <- am6
-
-##  add classes
-#data$class <- NULL
-data$class <- NA_character_
-data[can12m == T]$class <- lcamod_all$predclass
-
-data$class <- factor(data$class, levels = 1:6, 
-                     labels = c(
-                       "HOME CULTIVATION",
-                       "NO-POSESS",
-                       "ILLEGAL",
-                       "MIX",
-                       "SOCIAL",
-                       "PHARMACY"))
-
-data$class <- factor(data$class,
-                     levels = c(
-                       "MIX",
-                       "SOCIAL",
-                       "ILLEGAL",
-                       "HOME CULTIVATION",
-                       "PHARMACY",
-                       "NO-POSESS"))
-
-data[, prop.table(table(class))]
-class_props <- data[!is.na(class), .(weighted_sum = sum(weights)), by = class][
-  , .(class,weighted_prop = weighted_sum / sum(weighted_sum))][order(class)]
-
-
-## 2.4) Multinomial regression
+## 2.3) Multinomial regression
 #-------------------------------------------------------
 
 vars <- names(data)[names(data) %like% "sex|agegr|edu|DEGURBA|gisd|distress|health|freq12m|purpose|prescribed|castrisk"]
@@ -303,7 +148,7 @@ mnmod <- multinom(formula = f,data = sub)
 summary(mnmod)
 
 set.seed(924)
-    
+
 # Risk Ratios
 rs <- as.data.frame(exp(coef(mnmod))) 
 rs <- data.table(class = rownames(rs), rs)
@@ -327,36 +172,36 @@ regout <- merge(regout, p, by = c("class","variable"))
 
 ##  var labels for Table and Figure
 regout[, varlab := dplyr::recode_factor(variable,
-                                       "(Intercept)" = "Intercept",
-                                       "sexmen" = "Sex: men",
-                                       "agegroup25-34" = "Age: 25-34",
-                                       "agegroup35-44" = "Age: 35-44",
-                                       "agegroup45-54" = "Age: 45-54",
-                                       "agegroup55-64" = "Age: 55-64",
-                                       "edumid" = "Education: mid",
-                                       "eduhigh" = "Education: high",
-                                       "gisd_kmid" = "Regional deprivation: mid",
-                                       "gisd_khigh" = "Regional deprivation: high",
-                                       "DEGURBArural" = "DEGURBA: rural",
-                                       "DEGURBAtowns_suburbs" = "DEGURBA: towns and suburbs",
-                                       "freq12m1+ monthly"  = "Use frequency: at least monthly",
-                                       "freq12m1+ weekly"  = "Use frequency: at least weekly",
-                                       "freq12m(near) daily"  = "Use frequency: (near) daily",
-                                       "purposemedical and non-medical" = "Use purpose: medical and non-medical",
-                                       "purposeonly medical" = "Use purpose: only medical",
-                                       "prescribedTRUE" = "Has prescription for medical cannabis",
-                                       "castriskTRUE" = "CAST: high CUD risk",
-                                       "distressTRUE" = "K6: high distress",
-                                       "health_goodTRUE" = "Self-reported good health",
-                                       "health_chronicTRUE" = "Self-reported chronic disease")]
+                                        "(Intercept)" = "Intercept",
+                                        "sexmen" = "Sex: men",
+                                        "agegroup25-34" = "Age: 25-34",
+                                        "agegroup35-44" = "Age: 35-44",
+                                        "agegroup45-54" = "Age: 45-54",
+                                        "agegroup55-64" = "Age: 55-64",
+                                        "edumid" = "Education: mid",
+                                        "eduhigh" = "Education: high",
+                                        "gisd_kmid" = "Regional deprivation: mid",
+                                        "gisd_khigh" = "Regional deprivation: high",
+                                        "DEGURBArural" = "DEGURBA: rural",
+                                        "DEGURBAtowns_suburbs" = "DEGURBA: towns and suburbs",
+                                        "freq12m1+ monthly"  = "Use frequency: at least monthly",
+                                        "freq12m1+ weekly"  = "Use frequency: at least weekly",
+                                        "freq12m(near) daily"  = "Use frequency: (near) daily",
+                                        "purposemedical and non-medical" = "Use purpose: medical and non-medical",
+                                        "purposeonly medical" = "Use purpose: only medical",
+                                        "prescribedTRUE" = "Has prescription for medical cannabis",
+                                        "castriskTRUE" = "CAST: high CUD risk",
+                                        "distressTRUE" = "K6: high distress",
+                                        "health_goodTRUE" = "Self-reported good health",
+                                        "health_chronicTRUE" = "Self-reported chronic disease")]
 regout[, table(varlab, useNA = "always")]
 
 kable(regout[order(class,varlab),.(class,varlab,riskratio,ci,p)]) %>%
   kable_styling() %>%
-  save_kable(file = "tabs/sup_tab2_v4.html")
+  save_kable(file = paste0("tabs/sup_tab5_",DATE,".html"))
 
 
-## 2.5) Cannabis sourcing and use quantities
+## 2.4) Cannabis sourcing and use quantities
 #-------------------------------------------------------
 
 # total quantities
@@ -399,6 +244,10 @@ ggplot(data[regsample == T], aes(x = spend_monthly)) +
 
 
 
+
+
+
+
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
 # ==================================================================================================================================================================
@@ -409,27 +258,10 @@ ggplot(data[regsample == T], aes(x = spend_monthly)) +
 ## 3.1) TABLE 1
 #-------------------------------------------------------
 
-
-###
-library(gtsummary)
-library(survey)
-library(dplyr)
-
 # Define variables and create survey design
 vars <- names(data)[names(data) %like% "sex|age|edu|gisd|DEGURBA|freq12m|freq30d|quant_pd|earlyonset|purpose|prescribed|castrisk|distress|health"]
 subtab <- data[can12m == T, .SD, .SDcols = c(vars, "weights", "regsample")]
 subtab_svy <- svydesign(ids = ~1, weights = ~weights, data = subtab)
-
-# Custom test functions for survey data
-custom_ttest <- function(data, variable, by, ...) {
-  svyttest(as.formula(paste(variable, "~", by)), design = data) %>% 
-    broom::tidy()
-}
-
-custom_chisq <- function(data, variable, by, ...) {
-  svychisq(as.formula(paste("~", variable, "+", by)), design = data) %>% 
-    broom::tidy()
-}
 
 # Total sample table
 table1a <- tbl_svysummary(
@@ -474,8 +306,9 @@ combined_table %>%
     font_size = 16,
     html_font = "Arial"
   ) %>%
-  kableExtra::save_kable(file = "tabs/tab1_v4.html")
+  kableExtra::save_kable(file = paste0("tabs/tab1_",DATE,".html"))
 
+rm(subtab, subtab_svy, table1a, table1b, combined_table)
 
 ############
 
@@ -503,8 +336,73 @@ data[regsample == T, .(sum(source_other), wtd.mean(source_other, weights))] # 11
 data[can12m == T, .(sum(only_homegrow == T | only_cannabisclub == T | only_medical == T),
                     wtd.mean(only_homegrow == T | only_cannabisclub == T | only_medical == T, weights))] # 16.7%
 data[regsample == T, .(sum(only_homegrow == T | only_cannabisclub == T | only_medical == T),
-                    wtd.mean(only_homegrow == T | only_cannabisclub == T | only_medical == T, weights))] # 18.6%
+                       wtd.mean(only_homegrow == T | only_cannabisclub == T | only_medical == T, weights))] # 18.6%
 
+
+
+
+# ==================================================================================================================================================================
+# ==================================================================================================================================================================
+# ==================================================================================================================================================================
+
+## 3) SUPPLEMENTARY TABLES
+# ______________________________________________________________________________________________________________________
+
+## 3.1) SUPPLEMENTARY TABLE 1
+#-------------------------------------------------------
+
+# Define variables and create survey design
+vars <- names(data)[names(data) %like% "sex|age$|agegroup|edu|gisd|DEGURBA|can12m|alc12m|tob12m"]
+subtab <- data[, .SD, .SDcols = c(vars, "weights", "can12m")]
+names(subtab)[11] <- "subsample"
+subtab_svy <- svydesign(ids = ~1, weights = ~weights, data = subtab)
+
+# Total sample table
+table1a <- tbl_svysummary(
+  subtab_svy,
+  include = vars,
+  statistic = list(
+    all_continuous() ~ "{mean} ({sd})",
+    all_categorical() ~ "{n_unweighted} ({p}%)"
+  ),
+  digits = list(all_continuous() ~ 2, all_categorical() ~ c(0, 1))
+)
+
+# Subgroup table (all 12m can users) with custom tests
+table1b <- tbl_svysummary(
+  subtab_svy,
+  by = subsample,
+  include = vars,
+  statistic = list(
+    all_continuous() ~ "{mean} ({sd})",
+    all_categorical() ~ "{n_unweighted} ({p}%)"
+  ),
+  digits = list(all_continuous() ~ 2, all_categorical() ~ c(0, 1))
+) %>%
+  add_p(
+    test = list(
+      all_continuous() ~ "custom_ttest",
+      all_categorical() ~ "custom_chisq"
+    ),
+    pvalue_fun = ~ style_pvalue(., digits = 3)
+  )
+
+# Merge and export
+combined_table <- tbl_merge(
+  tbls = list(table1a, table1b),
+  tab_spanner = c("**Overall**", "**By Can-Use**")
+)
+
+combined_table %>%
+  as_kable_extra() %>%
+  kableExtra::kable_styling(
+    full_width = FALSE,
+    font_size = 16,
+    html_font = "Arial"
+  ) %>%
+  kableExtra::save_kable(file = paste0("tabs/sup_tab1_",DATE,".html"))
+
+rm(subtab, subtab_svy, table1a, table1b, combined_table)
 
 
 # ==================================================================================================================================================================
@@ -526,8 +424,12 @@ color_7 <- c("#4e0a39", "#c2154a", "#eb8102", "#f8cb00", "#929d0e", "#007c5f", "
 ## 4.1) LCA plot
 #-------------------------------------------------------
 
+# get class_props
+class_props <- data[!is.na(class), .(weighted_sum = sum(weights)), by = class][
+  , .(class,weighted_prop = weighted_sum / sum(weighted_sum))][order(class)]
+
 # prepare data
-pdat <- as.data.frame(lcamod_all$probs)
+pdat <- as.data.frame(lcamod$probs)
 pdat <- melt(data.table(class  = rownames(pdat), pdat), id.vars = "class")
 pdat <- pdat[stringr::str_sub(variable, -2,-2) == 2]
 pdat[, class := stringr::str_sub(class, 7,7)]
@@ -557,8 +459,8 @@ for(c in 1:length(class_props$class)){
   lab <- levels(pdat$class)[c]
   pdat[class == levels(pdat$class)[c], 
        ':=' (class_lab = paste0(lab,
-                           " (",
-                           round(class_props[class == lab]$weighted_prop,3)*100,"%)"),
+                                " (",
+                                round(class_props[class == lab]$weighted_prop,3)*100,"%)"),
              class_prop = class_props[class == lab]$weighted_prop)]    
   rm(lab)
   
@@ -618,7 +520,7 @@ ggplot(pdat, aes(x = varlab, y = riskratio, color = class)) +
   scale_color_manual("", values = rev(color_6[2:6]),
                      guide = guide_legend(reverse = TRUE)) +
   coord_flip() 
-  
+
 ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
 ggsave(paste0("figures/Fig2_Forest plot_",DATE,".pdf"), height = 8, width = 10)
 

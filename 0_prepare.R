@@ -30,7 +30,7 @@ if (any(installed_packages == FALSE)) {
 invisible(lapply(packages, library, character.only = TRUE))
 
 # current date:
-DATE <- format(Sys.Date(), "%Y%m%d")
+DATE <- format(Sys.Date(), "%y%m%d")
 
 # themes and options
 theme_set( theme_gdocs() )
@@ -81,7 +81,8 @@ data <- copy(input[,.(ID, weights,
                       age_firstuse,
                       MEDICALUSE.01,MEDICALUSE.02,
                       CAST_score_full,
-                      alcohol_freq,AUDITC2,AUDITC3,
+                      alcohol_freq,
+                      tobacco_freq,
                       HEALTH.01,HEALTH.02,
                       DISTRESS_total,
                       SOURCE.1,SOURCE.2,SOURCE.3,SOURCE.4,SOURCE.5_1,SOURCE.5_2,
@@ -196,8 +197,21 @@ data$gisd_k <- factor(data$gisd_k, levels = c(1,2,3), labels = c("low","mid","hi
 data[, prop.table(table(can_freq, gisd_k),2)]
 
 
+## 2.4) define COVARIATES - ALCOHOL AND TOBACCO
+#-------------------------------------------------------
 
-## 2.4) define COVARIATES - CANNABIS
+##  ALCOHOL
+data$alcohol_freq
+data[, alc12m := alcohol_freq != "gar nicht"]
+data[, table(alc12m, alcohol_freq)] # 1490
+
+##  TOBACCO
+data$tobacco_freq
+data[, tob12m := tobacco_freq != "gar nicht"]
+data[, table(tob12m, tobacco_freq)] # 1490
+
+
+## 2.5) define COVARIATES - CANNABIS
 #-------------------------------------------------------
 
 ##  FREQ12M
@@ -310,14 +324,14 @@ data[, table(DISTRESS_total)]
 data[!is.na(DISTRESS_total), distress := DISTRESS_total >= 13]
 data$DISTRESS_total <- NULL
 
-## 2.5) define SAMPLE FOR REGRESSION
+## 2.6) define SAMPLE FOR REGRESSION
 #-------------------------------------------------------
 
 ##  sample for regressions:
 data[,regsample := can30d == T & complete.cases(quant_pd_group)]
 data[, table(regsample)] # 723
 
-##  AUDIT-C???
+
 
 
 # ==================================================================================================================================================================
