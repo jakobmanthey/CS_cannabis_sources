@@ -211,7 +211,7 @@ data[can12m == T]$class <- lcamod$predclass
 data$class <- factor(data$class, levels = 1:6, 
                      labels = c(
                        "HOME CULTIVATION",
-                       "NO-POSESS",
+                       "OTHERS' SUPPLY",
                        "ILLEGAL",
                        "MIX",
                        "SOCIAL",
@@ -224,7 +224,7 @@ data$class <- factor(data$class,
                        "ILLEGAL",
                        "HOME CULTIVATION",
                        "PHARMACY",
-                       "NO-POSESS"))
+                       "OTHERS' SUPPLY"))
 
 data[, prop.table(table(class))]
 

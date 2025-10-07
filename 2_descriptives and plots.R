@@ -436,17 +436,25 @@ pdat[, class := stringr::str_sub(class, 7,7)]
 pdat[, source := stringr::str_sub(variable, 3,-7)]
 pdat[, prob := round(value,10)]
 pdat <- pdat[,.(class,source,prob)]
-pdat$source <- factor(pdat$source, c("knowndealer","unknowns","online","socialmedia",
-                                     "friends", 
-                                     "cannabisclub",
-                                     "homegrown_self", "homegrown_others", 
-                                     "pharmacy",
-                                     "no_possess", "other"))
+pdat[, source := recode(source, 
+                        "knowndealer" = "known dealer",
+                        "socialmedia" = "social media",
+                        "cannabisclub" = "cannabis club",
+                        "homegrown_self" = "homegrown (own plants)",
+                        "homegrown_others" = "homegrown (others' plants)",
+                        "no_possess" = "others' supply")]
+
+pdat$source <- factor(pdat$source, levels = c("known dealer","unknowns","online","social media",
+                         "friends", 
+                         "cannabis club",
+                         "homegrown (own plants)", "homegrown (others' plants)", 
+                         "pharmacy",
+                         "others' supply", "other"))
 
 pdat$class <- factor(pdat$class, levels = 1:6, 
                      labels = c(
                        "HOME CULTIVATION",
-                       "NO-POSESS",
+                       "OTHERS' SUPPLY",
                        "ILLEGAL",
                        "MIX",
                        "SOCIAL",
@@ -492,15 +500,46 @@ ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
   scale_y_continuous("% Response probability\nwithin each class", 
                      breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
 
-ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".png"), height = 6, width = 12)
-ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".pdf"), height = 6, width = 12)
+#ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".png"), height = 6, width = 12)
+#ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".pdf"), height = 6, width = 12)
+
+
+##  ALTERNATIVE PLOT AFTER REVISION --> BARPLOT
+pdat$source_rev <- factor(pdat$source, levels = rev(levels(pdat$source)))
+
+ggplot(pdat, aes(x = source_rev, y = prob, group = class_lab, fill = class_lab)) +
+  facet_wrap(class_lab ~ .) +
+  geom_col(show.legend = F) +
+  theme(
+    #axis.text.x = element_text(hjust = 0.5, vjust = 0.5, angle = 45),
+    axis.text.y = element_text(size = 12),              
+    axis.title.x = element_text(size = 14),          
+    axis.title.y = element_text(size = 14),            
+    plot.title = element_text(hjust = 0.5, size = 16), 
+    legend.text = element_text(size = 12),             
+    legend.title = element_text(size = 14),
+    legend.position = "bottom",
+    #panel.grid.major.x = element_blank(),
+    #panel.grid.minor.y = element_blank()
+    ) +
+  guides(fill = guide_legend(nrow = 2)) +
+  scale_x_discrete("") +
+  scale_fill_manual("", values = color_6) +
+  scale_y_continuous("% Response probability within each class", 
+                     breaks = seq(0, 1, by = 0.25), limits = c(0, 1), labels = scales::percent) +
+  coord_flip()
+
+ggsave(paste0("figures/Fig1_LCA_probabilities_after revision_",DATE,".png"), height = 8, width = 12)
+ggsave(paste0("figures/Fig1_LCA_probabilities_after revision_",DATE,".pdf"), height = 8, width = 12)
 
 rm(pdat, c, levelorder)
+
+
 
 ## 4.2) Forest plot
 #-------------------------------------------------------
 
-pdat <- regout[variable != "(Intercept)",.(class,varlab,riskratio,lower = `2.5 %`,upper = `97.5 %`)]
+pdat <- regout[variable != "(Intercept)",.(class,varlab,riskratio,lower = `2.5 %`,upper = `97.5 %`,sig = p<.05)]
 pdat$class <- factor(pdat$class, levels = rev(levels(data$class)))
 
 pdat$varlab <- factor(pdat$varlab, levels = rev(levels(pdat$varlab)))
@@ -521,8 +560,28 @@ ggplot(pdat, aes(x = varlab, y = riskratio, color = class)) +
                      guide = guide_legend(reverse = TRUE)) +
   coord_flip() 
 
-ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
-ggsave(paste0("figures/Fig2_Forest plot_",DATE,".pdf"), height = 8, width = 10)
+#ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
+#ggsave(paste0("figures/Fig2_Forest plot_",DATE,".pdf"), height = 8, width = 10)
+
+##  ALTERNATIVE PLOT AFTER REVISION --> non-sign coefs are transparent
+
+ggplot(pdat, aes(x = varlab, y = riskratio, color = class, alpha = sig)) + 
+  facet_grid(group ~ ., scales = "free", space = "free") +
+  geom_hline(yintercept = 1) +
+  geom_point(position = position_dodge(0.7), size = 2) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width = 0, position = position_dodge(0.7), linewidth = 0.4) +
+  scale_x_discrete("") +
+  scale_y_continuous("Risk Ratio", transform = "log10") +
+  scale_alpha_manual(values = c(0.2,1)) +
+  scale_color_manual("", values = rev(color_6[2:6]),
+                   guide = guide_legend(reverse = TRUE)) +
+  guides(alpha = "none") +
+  coord_flip() 
+
+ggsave(paste0("figures/Fig2_Forest plot_after revision_",DATE,".png"), height = 9, width = 10)
+ggsave(paste0("figures/Fig2_Forest plot_after revision_",DATE,".pdf"), height = 9, width = 10)
+
 
 rm(pdat)
 
