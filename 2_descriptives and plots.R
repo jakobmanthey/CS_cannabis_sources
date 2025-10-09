@@ -450,6 +450,7 @@ pdat$source <- factor(pdat$source, levels = c("known dealer","unknowns","online"
                          "homegrown (own plants)", "homegrown (others' plants)", 
                          "pharmacy",
                          "others' supply", "other"))
+pdat$source_rev <- factor(pdat$source, levels = rev(levels(pdat$source)))
 
 pdat$class <- factor(pdat$class, levels = 1:6, 
                      labels = c(
@@ -479,39 +480,10 @@ levelorder <- unique(pdat[order(class_prop, decreasing = T)]$class_lab)
 pdat$class_lab <- factor(pdat$class_lab, 
                          levels = levelorder)
 
-# generate plot
-ggplot(pdat, aes(x = source, y = prob, group = class_lab, color = class_lab)) +
-  geom_point() +
-  geom_line(linewidth=1) +
-  theme(
-    axis.text.x = element_text(hjust = 0.5, vjust = 0.5, angle = 45),
-    axis.text.y = element_text(size = 12),              
-    axis.title.x = element_text(size = 14),          
-    axis.title.y = element_text(size = 14),            
-    plot.title = element_text(hjust = 0.5, size = 16), 
-    legend.text = element_text(size = 12),             
-    legend.title = element_text(size = 14),
-    legend.position = "bottom",
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.y = element_blank()) +
-  guides(color = guide_legend(nrow = 2), linetype = guide_legend(nrow = 1)) +
-  scale_x_discrete("") +
-  scale_color_manual("classes (weighted population share)", values = color_6) +
-  scale_y_continuous("% Response probability\nwithin each class", 
-                     breaks = seq(0, 1, by = 0.1), limits = c(0, 1), labels = scales::percent) 
-
-#ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".png"), height = 6, width = 12)
-#ggsave(paste0("figures/Fig1_LCA_probabilities_",DATE,".pdf"), height = 6, width = 12)
-
-
-##  ALTERNATIVE PLOT AFTER REVISION --> BARPLOT
-pdat$source_rev <- factor(pdat$source, levels = rev(levels(pdat$source)))
-
 ggplot(pdat, aes(x = source_rev, y = prob, group = class_lab, fill = class_lab)) +
   facet_wrap(class_lab ~ .) +
   geom_col(show.legend = F) +
   theme(
-    #axis.text.x = element_text(hjust = 0.5, vjust = 0.5, angle = 45),
     axis.text.y = element_text(size = 12),              
     axis.title.x = element_text(size = 14),          
     axis.title.y = element_text(size = 14),            
@@ -519,8 +491,6 @@ ggplot(pdat, aes(x = source_rev, y = prob, group = class_lab, fill = class_lab))
     legend.text = element_text(size = 12),             
     legend.title = element_text(size = 14),
     legend.position = "bottom",
-    #panel.grid.major.x = element_blank(),
-    #panel.grid.minor.y = element_blank()
     ) +
   guides(fill = guide_legend(nrow = 2)) +
   scale_x_discrete("") +
@@ -547,23 +517,6 @@ pdat$varlab <- factor(pdat$varlab, levels = rev(levels(pdat$varlab)))
 pdat[, group := ifelse(varlab %like% "Sex|Age|Edu|depri|DEGURBA", "sociodemographics",
                        ifelse(varlab %like% "frequenc|purpose|prescription|CAST", "cannabis-related", "health-related"))]
 pdat$group <- factor(pdat$group, levels = c("sociodemographics","cannabis-related", "health-related"))
-
-ggplot(pdat, aes(x = varlab, y = riskratio, color = class)) + 
-  facet_grid(group ~ ., scales = "free", space = "free") +
-  geom_hline(yintercept = 1) +
-  geom_point(position = position_dodge(0.7), size = 2) +
-  geom_errorbar(aes(ymin = lower, ymax = upper), 
-                width = 0, position = position_dodge(0.7), linewidth = 0.4) +
-  scale_x_discrete("") +
-  scale_y_continuous("Risk Ratio", transform = "log10") +
-  scale_color_manual("", values = rev(color_6[2:6]),
-                     guide = guide_legend(reverse = TRUE)) +
-  coord_flip() 
-
-#ggsave(paste0("figures/Fig2_Forest plot_",DATE,".png"), height = 8, width = 10)
-#ggsave(paste0("figures/Fig2_Forest plot_",DATE,".pdf"), height = 8, width = 10)
-
-##  ALTERNATIVE PLOT AFTER REVISION --> non-sign coefs are transparent
 
 ggplot(pdat, aes(x = varlab, y = riskratio, color = class, alpha = sig)) + 
   facet_grid(group ~ ., scales = "free", space = "free") +
@@ -596,11 +549,11 @@ ggplot(pdat, aes(x = class, y = quant_tot, fill = class)) +
   geom_boxplot(alpha = 0.8, show.legend = F) + 
   geom_jitter(alpha = 0.3, show.legend = F, width = 0.2) + 
   scale_x_discrete("") + 
-  scale_y_continuous("30-day cannabis use quanties\n(logarithmized scale)", trans = "log10") + 
+  scale_y_continuous("30-day cannabis use quantities\n(logarithmized scale)", trans = "log10") + 
   scale_fill_manual(values = color_6)
 
-ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".png"), height = 5, width = 10)
-ggsave(paste0("figures/Fig3_QUANT JITTER_",DATE,".pdf"), height = 5, width = 10)
+ggsave(paste0("figures/Fig3_QUANT JITTER_after revision_",DATE,".png"), height = 5, width = 10)
+ggsave(paste0("figures/Fig3_QUANT JITTER_after revision_",DATE,".pdf"), height = 5, width = 10)
 
 rm(pdat)
 
